@@ -102,10 +102,13 @@ static const uint8_t FONT[][5] = {
   {0x44,0x64,0x54,0x4C,0x44}, // z
 };
 
+// Largura/altura da imagem em que se desenha: 320x240, ou 240x320 quando o quadro foi girado.
+static int g_w = IMG_W, g_h = IMG_H;
+
 static void fill_rect(uint16_t *img, int x1, int y1, int x2, int y2, uint16_t c) {
-  x1 = max(0, x1); y1 = max(0, y1); x2 = min(IMG_W - 1, x2); y2 = min(IMG_H - 1, y2);
+  x1 = max(0, x1); y1 = max(0, y1); x2 = min(g_w - 1, x2); y2 = min(g_h - 1, y2);
   for (int y = y1; y <= y2; y++)
-    for (int x = x1; x <= x2; x++) img[y * IMG_W + x] = c;
+    for (int x = x1; x <= x2; x++) img[y * g_w + x] = c;
 }
 
 static void draw_box(uint16_t *img, int x1, int y1, int x2, int y2, uint16_t c) {
@@ -120,11 +123,11 @@ static void draw_box(uint16_t *img, int x1, int y1, int x2, int y2, uint16_t c) 
 // Escreve texto com fundo; posiciona acima da caixa (ou abaixo se nao couber)
 static void draw_label(uint16_t *img, const char *txt, int bx, int by_top, int by_bot, uint16_t bg) {
   int len = strlen(txt);
-  int scale = (len * 6 * 2 + 4 <= IMG_W) ? 2 : 1;
+  int scale = (len * 6 * 2 + 4 <= g_w) ? 2 : 1;
   int w = len * 6 * scale + 4, h = 7 * scale + 4;
-  int x = constrain(bx, 0, IMG_W - w);
+  int x = constrain(bx, 0, g_w - w);
   int y = by_top - h;
-  if (y < 0) y = min(by_bot + 1, IMG_H - h);
+  if (y < 0) y = min(by_bot + 1, g_h - h);
   fill_rect(img, x, y, x + w - 1, y + h - 1, bg);
   for (int i = 0; i < len; i++) {
     const char *p = strchr(FONT_CHARS, txt[i]);
@@ -400,9 +403,35 @@ static bool vision_needed() {
   return vision_always_on || stream_clients > 0 || (int32_t)(vision_wake_until - millis()) > 0;
 }
 
+// ---------- quadro girado ----------
+// O detector so acha rosto EM PE. Com a pessoa deitada (ou a camera de lado), o rosto chega deitado
+// e nunca e achado (11/11/2026: rosto no quadro, de lado, 0 deteccoes). Sem rosto por GIRO_TENTATIVAS
+// quadros, o proximo e girado 90 graus para um lado, depois para o outro; achou, fica na orientacao.
+#define GIRO_TENTATIVAS 3
+static const char *GIRO_NOME[] = {"normal", "girado anti-horario", "girado horario"};
+static int giro_modo = 0;  // 0 normal, 1 anti-horario, 2 horario
+
+// dst (h x w, isto e, largura h e altura w) = src (w x h) girado 90 graus.
+static void gira(uint16_t *dst, const uint16_t *src, int w, int h, int modo) {
+  for (int yp = 0; yp < w; yp++) {
+    uint16_t *d = dst + yp * h;
+    if (modo == 1) { const uint16_t *s = src + (w - 1 - yp); for (int xp = 0; xp < h; xp++) d[xp] = s[xp * w]; }
+    else           { for (int xp = 0; xp < h; xp++) d[xp] = src[(h - 1 - xp) * w + yp]; }
+  }
+}
+
+// Ponto do quadro girado de volta para o quadro da camera (o pescoco se move no quadro da camera).
+static void desgira(int modo, int xp, int yp, int w, int h, int *x, int *y) {
+  if (modo == 1) { *x = w - 1 - yp; *y = xp; }
+  else if (modo == 2) { *x = yp; *y = h - 1 - xp; }
+  else { *x = xp; *y = yp; }
+}
+
 static void vision_task(void *) {
   uint32_t t_last = millis();
   String last_report = "";
+  static uint16_t *girado = (uint16_t *)ps_malloc(IMG_W * IMG_H * 2);
+  int sem_rosto = 0;
 
   while (true) {
     if (cam_reinit && camera_on) { esp_camera_deinit(); camera_on = false; cam_reinit = false; }
@@ -421,7 +450,13 @@ static void vision_task(void *) {
     camera_fb_t *fb = esp_camera_fb_get();
     if (!fb) { delay(10); continue; }
     uint16_t *img = (uint16_t *)fb->buf;
-    std::vector<int> shape = {(int)fb->height, (int)fb->width, 3};
+    int modo = giro_modo, iw = fb->width, ih = fb->height;
+    if (modo && girado && iw == IMG_W && ih == IMG_H) {
+      gira(girado, img, iw, ih, modo);
+      img = girado; iw = fb->height; ih = fb->width;
+    } else modo = 0;
+    g_w = iw; g_h = ih;
+    std::vector<int> shape = {ih, iw, 3};
 
     auto &cand = det1->infer(img, shape);
     auto &res = det2->infer(img, shape, cand);
@@ -507,10 +542,29 @@ static void vision_task(void *) {
     }
     xSemaphoreGive(apr_mutex);
 
-    if (best_area > 0) robo_track_face(best_cx, best_cy, fb->width, fb->height);
+    if (best_area > 0) {
+      int cx, cy;
+      desgira(modo, best_cx, best_cy, fb->width, fb->height, &cx, &cy);
+      robo_track_face(cx, cy, fb->width, fb->height);
+    }
 
+    // Orientacao: achou rosto, fica nela; sem rosto por alguns quadros, tenta a proxima.
+    static int modo_avisado = -1;
+    if (n > 0) {
+      if (modo != modo_avisado) { LOGF("[camera] rosto achado com o quadro %s", GIRO_NOME[modo]); modo_avisado = modo; }
+      sem_rosto = 0;
+    } else if (++sem_rosto >= GIRO_TENTATIVAS) {
+      sem_rosto = 0;
+      giro_modo = (giro_modo + 1) % 3;
+      modo_avisado = -1;
+    }
+
+    // A pagina e a foto do cerebro: com rosto, o quadro em que ele foi achado (com os quadrados);
+    // sem rosto, sempre o quadro normal, para a imagem nao ficar girando enquanto procura.
     uint8_t *jpg = NULL; size_t jlen = 0;
-    bool ok = fmt2jpg(fb->buf, fb->len, fb->width, fb->height, fb->format, 75, &jpg, &jlen);
+    bool ok = (n > 0 && modo)
+                  ? fmt2jpg((uint8_t *)img, fb->len, iw, ih, fb->format, 75, &jpg, &jlen)
+                  : fmt2jpg(fb->buf, fb->len, fb->width, fb->height, fb->format, 75, &jpg, &jlen);
     esp_camera_fb_return(fb);
 
     uint32_t now = millis();
