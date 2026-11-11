@@ -313,8 +313,10 @@ static void apr_grava() {
   apr_sujo = false;
   xSemaphoreGive(apr_mutex);
   if (n && !copia) { apr_sujo = true; return; }
+  // monta so para gravar: montado, o LittleFS segura RAM interna e a camera nao acorda mais
+  if (!LittleFS.begin(false)) { apr_sujo = true; free(copia); return; }
   File f = LittleFS.open(APR_ARQUIVO, "w");
-  if (!f) { apr_sujo = true; free(copia); return; }
+  if (!f) { LittleFS.end(); apr_sujo = true; free(copia); return; }
   f.write((const uint8_t *)"ROS1", 4);
   f.write((const uint8_t *)&dim, 4);
   f.write((const uint8_t *)&n, 4);
@@ -323,16 +325,19 @@ static void apr_grava() {
     f.write((const uint8_t *)copia[i].emb, dim * sizeof(float));
   }
   f.close();
+  LittleFS.end();
   free(copia);
   LOGF("[rosto] %d amostras gravadas na flash", n);
 }
 
 static void apr_carrega() {
   apr = (Amostra *)ps_malloc(APR_MAX * sizeof(Amostra));
+  // Monta, le e DESMONTA: o LittleFS montado segura ~10 KB de RAM interna e quebra o maior bloco
+  // livre; sem um bloco de ~32 KB a camera nao volta a acordar (esp_camera_init 0xffffffff, 11/11/2026).
   fs_ok = LittleFS.begin(true);  // particao spiffs; formata na primeira vez
   if (!apr || !fs_ok) { LOGF("[rosto] sem memoria para rostos aprendidos (psram=%d fs=%d)", apr != NULL, fs_ok); return; }
   File f = LittleFS.open(APR_ARQUIVO, "r");
-  if (!f) { LOGF("[rosto] nenhum rosto aprendido ainda"); return; }
+  if (!f) { LittleFS.end(); LOGF("[rosto] nenhum rosto aprendido ainda"); return; }
   char mag[4]; int dim = 0, n = 0;
   if (f.read((uint8_t *)mag, 4) == 4 && !memcmp(mag, "ROS1", 4) && f.read((uint8_t *)&dim, 4) == 4 &&
       f.read((uint8_t *)&n, 4) == 4 && dim > 0 && dim <= APR_DIM_MAX && n >= 0 && n <= APR_MAX) {
@@ -345,6 +350,7 @@ static void apr_carrega() {
     apr_n = lidas; apr_dim = dim;
   }
   f.close();
+  LittleFS.end();
   String quem = "";
   for (int i = 0; i < apr_n; i++)
     if (quem.indexOf(String(apr[i].nome) + " (") < 0) quem += String(apr[i].nome) + " (" + apr_conta(apr[i].nome) + ") ";
@@ -824,10 +830,12 @@ static void cmd_task(void *) {
       bool sta = WiFi.status() == WL_CONNECTED;
       snprintf(b, sizeof(b),
                "{\"uptime_s\":%lu,\"wifi\":%d,\"rede\":\"%s\",\"ip\":\"%s\",\"ap\":%d,\"ap_rede\":\"%s\",\"ap_senha\":\"%s\","
-               "\"ap_ip\":\"%s\",\"rssi\":%d,\"ram_interna\":%u,\"camera\":%d,%s}",
+               "\"ap_ip\":\"%s\",\"rssi\":%d,\"ram_interna\":%u,\"ram_maior_bloco\":%u,\"camera\":%d,"
+               "\"pan\":%d,\"tilt\":%d,%s}",
                millis() / 1000, sta, sta ? WiFi.SSID().c_str() : "", WiFi.localIP().toString().c_str(), ap_on,
                AP_SSID, AP_PASS, WiFi.softAPIP().toString().c_str(), WiFi.RSSI(),
-               heap_caps_get_free_size(MALLOC_CAP_INTERNAL), camera_on, m);
+               heap_caps_get_free_size(MALLOC_CAP_INTERNAL), heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+               camera_on, robo_pan(), robo_tilt(), m);
       link_send('S', b, strlen(b));
     }
   }
