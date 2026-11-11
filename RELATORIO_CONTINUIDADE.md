@@ -441,6 +441,14 @@ o volume dobrado limpar, subir `SPK_VOLUME` (hoje 0,25).
 - **Início automático** a cada login (escondido): `ponte\.venv\Scripts\python ferramentas\inicio_automatico.py`
   (`--tirar` desliga). Tem de ser rodado pelo dono (cria atalho na pasta Inicializar).
 
+### 13.8 O Jaspy apresenta seminário (11/11/2026, ✅ apresentado)
+`ferramentas/apresentar.py` + `apresentacao/roteiro.json`: slides em tela cheia no PC, o Jaspy fala cada slide
+pelo alto-falante (com gestos) e passa sozinho ao terminar; no fim, `--conversar-depois` liga o robô para o
+debate. Falas geradas antes (voz neural, 2 tentativas de 20 s por trecho; Maria só no que falhar), cache em
+`apresentacao/audio/`. Imagens dos slides em `apresentacao/slides/` (fora do git: fotos de bancada).
+**Resultado:** seminário "Do Protótipo ao Chão de Fábrica" apresentado inteiro, 6 slides, 26 trechos,
+**5,8 min**, e o dono aprovou ("foi perfeito"). Volume no máximo (comando `volume 0-100` na placa).
+
 ## 12. Cadastro facial com outras fotos
 
 1. Fotos `.jpeg` em `fotos_cadastro/`.
