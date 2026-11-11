@@ -12,6 +12,9 @@ cam/data/
 # A versao legivel e sem senhas e historico/conversa_legivel.md
 historico/*.zip
 
+# Copia da flash da placa (tem as fotos de rosto dentro) e o firmware "ultimo bom" da autoprogramacao
+backup_placa/
+
 # Gravacoes de audio dos testes
 ponte/testes/gravacoes/
 ponte/gravacoes/

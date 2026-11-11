@@ -26,15 +26,36 @@ Seu corpo: uma camera (seus olhos), um microfone (seus ouvidos), um alto-falante
 A cada mensagem voce recebe:
 - o que a pessoa falou (transcrito automaticamente; pode ter pequenos erros, interprete com bom senso);
 - uma foto atual da sua camera, ja com o reconhecimento facial desenhado:
-  quadrado VERDE "Rapaz bonito e inteligente" = o seu dono, a pessoa que voce conhece;
-  quadrado VERMELHO "Creatura" = alguem que voce nao conhece;
-- um resumo do reconhecimento facial.
+  quadrado VERDE = alguem que voce conhece; quadrado VERMELHO "Creatura" = alguem que voce nao conhece;
+- um resumo do reconhecimento facial com o NOME de cada rosto e a certeza;
+- a data e a hora de agora.
 
-Chame o seu dono de "Rapaz bonito e inteligente" de vez em quando e trate pessoas desconhecidas, de brincadeira, por "Creatura".
+"Rapaz bonito e inteligente" e o seu dono. As outras pessoas conhecidas aparecem pelo nome que elas
+mesmas te ensinaram. Chame cada um pelo nome. Trate quem e "Creatura", de brincadeira, por "Creatura".
 Use a foto quando for relevante (o que a pessoa esta mostrando, onde ela esta etc.), sem descrever a imagem toda hora.
+
+Voce APRENDE rostos novos pela camera:
+- Se o reconhecimento mostra exatamente UM rosto e ele e "Creatura", e essa pessoa diz o nome dela
+  ("meu nome e Ana", "eu sou o Pedro", "pode me chamar de Bia"), coloque "aprender": "Ana" no JSON e,
+  na fala, cumprimente pelo nome e peca para ela olhar para a camera uns segundos enquanto voce memoriza.
+- Se o rosto e "Creatura" e a pessoa conversa sem dizer o nome, voce pode perguntar o nome dela.
+- Se pedirem para esquecer alguem, coloque "esquecer": "Nome".
+- Nunca use "aprender" com mais de um rosto ou sem rosto no reconhecimento: peca para a pessoa ficar
+  sozinha de frente para a camera.
+- Depois de aprender, voce continua juntando amostras sozinho cada vez que ve a pessoa: com o tempo
+  voce reconhece cada vez melhor.
+
+Voce tambem se REPROGRAMA (um Claude Code mexe no seu codigo e no seu firmware):
+- Se o seu dono pedir para voce mudar, melhorar ou aprender a fazer algo novo no seu proprio
+  comportamento, codigo ou firmware ("aprende a...", "muda o seu codigo para...", "melhora o seu..."),
+  coloque "programar": "<o pedido, claro e completo, em portugues>" e diga que vai trabalhar nisso
+  (leva alguns minutos; voce continua conversando enquanto isso).
+- Quando a mudanca estiver pronta, voce vai ser avisado aqui. Ai: se a pessoa autorizar ("pode gravar",
+  "sim, grava"), coloque "gravar": true; se recusar, coloque "descartar": true. Nunca grave sem ela autorizar.
 
 Responda SEMPRE e SOMENTE com um JSON valido, sem nada antes ou depois:
 {"fala": "...", "gesto": "nenhum", "olhar": null}
+- "aprender", "esquecer", "programar", "gravar", "descartar": opcionais, so quando for o caso (veja acima).
 - "fala": o que voce vai dizer em voz alta. Curto e natural (1 a 3 frases), sem emojis, sem markdown, sem listas.
 - "gesto": um de "sim" (acenar com a cabeca), "nao" (balancar a cabeca), "curioso" (inclinar a cabeca), "centro" (olhar para frente) ou "nenhum".
 - "olhar": null, ou {"pan": 20-160, "tilt": 50-130} para virar o pescoco para uma direcao (pan 90/tilt 90 = frente; pan maior = esquerda; tilt maior = baixo).
@@ -347,15 +368,20 @@ class Brain:
                                      text=True, encoding="utf-8", cwd=HERE)
         log(f"[cerebro] Claude ({self.model}) iniciado")
 
-    def ask(self, heard, jpeg, faces):
+    def ask(self, heard, jpeg, faces, extra=""):
         if self.proc is None or self.proc.poll() is not None:
             self._start()
         if faces and faces.get("list"):
             who = ", ".join(f"{f['name']} ({round(f['sim'] * 100)}%)" for f in faces["list"])
         else:
             who = "nenhum rosto visivel"
+        if faces and faces.get("aprendendo"):
+            who += f" (voce esta memorizando o rosto de {faces['aprendendo']} agora)"
         send_photo = bool(jpeg) and is_visual(heard)
-        text = f'A pessoa disse: "{heard}"\nReconhecimento facial agora: {who}.'
+        agora = time.strftime("%d/%m/%Y %H:%M")
+        text = f'A pessoa disse: "{heard}"\nReconhecimento facial agora: {who}.\nAgora: {agora}.'
+        if extra:
+            text += "\n" + extra
         if not send_photo:
             text += "\n(Sem foto nesta mensagem: a foto so vem quando a pergunta e sobre o que voce ve. " \
                     "Nao comente sobre a camera.)"
@@ -461,6 +487,19 @@ def look_and_gesture(robot, r):
     o = r.get("olhar")
     if isinstance(o, dict) and "pan" in o and "tilt" in o:
         robot.look(o["pan"], o["tilt"])
+    learn_faces(robot, r)
+
+
+def learn_faces(robot, r):
+    """Aprender/esquecer rostos: a placa tira as amostras sozinha pela camera (comandos do link USB)."""
+    if not hasattr(robot, "cmd"):
+        return  # transporte wifi: a placa so aprende pelo USB
+    for campo, comando in (("aprender", "aprender"), ("esquecer", "esquecer")):
+        nome = r.get(campo)
+        if isinstance(nome, str) and nome.strip():
+            nome = re.sub(r'["\\;\r\n]', "", nome.strip())[:31]
+            robot.cmd(f"{comando} {nome}")
+            log(f"[rosto] {comando}: {nome}")
 
 
 def autotest_thread(robot, phrases, idle_ev, results):
@@ -511,6 +550,8 @@ def main():
     ap.add_argument("--logs-placa", action="store_true", help="mostra os logs da placa (so USB)")
     ap.add_argument("--salvar-audio", action="store_true", help="salva cada fala ouvida em ponte/gravacoes/")
     ap.add_argument("--autoteste", help="frases separadas por | que o robo toca para si mesmo e responde")
+    ap.add_argument("--modelo-programador", default="opus",
+                    help="modelo do Claude Code que reprograma o robo (autoprogramacao)")
     args = ap.parse_args()
 
     robot = None
@@ -563,6 +604,14 @@ def main():
     brain._start()
     on_pc = args.falar_no_pc or robot is None
 
+    # autoprogramacao: o que o robo tem a dizer sozinho (fim da programacao) entra nesta fila
+    from autoprogramacao import Programador, ler_resultado
+    anuncios = queue.Queue()
+    prog = Programador(args.modelo_programador, log=log, anunciar=anuncios.put)
+    res = ler_resultado()  # deixado pelo supervisor depois de gravar
+    if res:
+        anuncios.put(res.get("fala") or f"Estou de volta. {res.get('resumo', '')}")
+
     idle_ev = threading.Event(); idle_ev.set()
     auto_results = []
     if args.autoteste and robot and not args.texto:
@@ -586,6 +635,12 @@ def main():
                     except queue.Empty:
                         if auto_results and auto_results[-1] is None:
                             raise KeyboardInterrupt
+                        if not anuncios.empty():
+                            texto = anuncios.get()
+                            log(f"[anuncio] {texto}")
+                            idle_ev.clear()
+                            speak(robot, ears, texto, args.volume, on_pc)
+                            idle_ev.set()
                 idle_ev.clear()
                 # foto e rostos em paralelo com a transcricao (a camera ja acordou quando a voz comecou)
                 th = threading.Thread(target=lambda: seen.update(
@@ -609,11 +664,18 @@ def main():
         else:
             th.join(10)
         t_stt = time.time()
-        r = brain.ask(heard, seen.get("jpeg"), seen.get("faces"))
+        r = brain.ask(heard, seen.get("jpeg"), seen.get("faces"), prog.contexto())
         t_brain = time.time()
         log(f"[cerebro] ({t_brain - t_stt:.1f}s) {json.dumps(r, ensure_ascii=False)}")
         if robot:
             look_and_gesture(robot, r)
+        sair_com = None
+        if isinstance(r.get("programar"), str) and r["programar"].strip():
+            prog.comeca(r["programar"])
+        if r.get("gravar") is True:
+            sair_com = prog.gravar()  # o supervisor grava e volta o robo
+        elif r.get("descartar") is True:
+            prog.descartar()
         log(f"[tempo] fim da fala -> inicio da resposta: {time.time() - t_end:.1f}s "
             f"(ouvir+foto {t_stt - t_end:.1f}s, pensar {t_brain - t_stt:.1f}s)")
         if auto_results and auto_results[-1] is not None:
@@ -621,6 +683,9 @@ def main():
                                     foto=bool(seen.get("jpeg")))
         speak(robot, ears, r.get("fala", ""), args.volume, on_pc)
         idle_ev.set()
+        if sair_com is not None:
+            log(f"[autoprog] saindo para o supervisor gravar (codigo {sair_com})")
+            sys.exit(sair_com)
 
     if auto_results:
         log("[autoteste] RESULTADO:")

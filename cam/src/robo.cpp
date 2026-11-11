@@ -27,10 +27,18 @@ static float pan_now = 90, tilt_now = 90;
 static volatile bool tracking = true;
 static volatile uint32_t gesture_until = 0;
 
+// Velocidade maxima (graus/s) e freio suave: o pescoco estava agressivo
+// (125 graus/s seguindo o rosto, 300 nos gestos). Pedido do usuario em
+// 11/11/2026: "bem lentamente".
+#define SERVO_VEL_RASTREIO 20.0f  // seguindo o rosto
+#define SERVO_VEL_GESTO 45.0f     // sim / nao / curioso
+#define SERVO_FREIO 0.24f         // fracao do erro por passo de 20 ms: desacelera ao chegar
+
+// Cada passo do gesto dura o bastante para o servo chegar na velocidade de cima.
 struct Key { int8_t dpan, dtilt; uint16_t ms; };
-static const Key G_SIM[] = {{0, 15, 250}, {0, -10, 250}, {0, 15, 250}, {0, -10, 250}, {0, 0, 250}};
-static const Key G_NAO[] = {{-20, 0, 250}, {20, 0, 250}, {-20, 0, 250}, {20, 0, 250}, {0, 0, 250}};
-static const Key G_CURIOSO[] = {{0, 0, 100}, {12, -8, 600}, {0, 0, 400}};
+static const Key G_SIM[] = {{0, 12, 800}, {0, -8, 800}, {0, 12, 800}, {0, -8, 800}, {0, 0, 800}};
+static const Key G_NAO[] = {{-15, 0, 800}, {15, 0, 800}, {-15, 0, 800}, {15, 0, 800}, {0, 0, 800}};
+static const Key G_CURIOSO[] = {{0, 0, 100}, {12, -8, 1200}, {0, 0, 1000}};
 static const Key *g_keys = NULL;
 static int g_len = 0;
 static float g_base_pan, g_base_tilt;
@@ -55,9 +63,11 @@ static void servo_task(void *) {
         }
       }
     } else g_i = 0, g_next = 0;
-    float step = g_keys ? 6.0f : 2.5f;  // graus por passo de 20 ms
-    pan_now += constrain(pan_target - pan_now, -step, step);
-    tilt_now += constrain(tilt_target - tilt_now, -step, step);
+    // Passo de 20 ms: uma fracao do que falta (freia ao chegar), nunca acima
+    // da velocidade maxima.
+    const float step = (g_keys ? SERVO_VEL_GESTO : SERVO_VEL_RASTREIO) * 0.020f;
+    pan_now += constrain((pan_target - pan_now) * SERVO_FREIO, -step, step);
+    tilt_now += constrain((tilt_target - tilt_now) * SERVO_FREIO, -step, step);
     servo_write(SERVO_CH_PAN, pan_now);
     servo_write(SERVO_CH_TILT, tilt_now);
     delay(20);

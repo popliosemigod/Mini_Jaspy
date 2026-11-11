@@ -11,6 +11,7 @@ static WiFiMulti wifi_multi;
 #include "human_face_detect_msr01.hpp"
 #include "human_face_detect_mnp01.hpp"
 #include "face_recognition_112_v1_s8.hpp"
+#include <LittleFS.h>
 #include "robo.h"
 #include "link.h"
 
@@ -193,13 +194,184 @@ static void enroll_from_photos() {
   free(img); free(flip);
 }
 
+// ---------- rostos aprendidos pela camera ----------
+// Quem aparece como "Creatura" diz o nome; o robo guarda amostras do rosto (o vetor que o modelo
+// tira de cada rosto) e passa a reconhecer a pessoa pelo nome. Depois, sempre que reconhece alguem
+// com certeza media, junta mais uma amostra: aprende aos poucos, pela propria camera.
+// As amostras ficam na PSRAM (a RAM interna e o recurso critico, ver relatorio 6.3) e no arquivo
+// /rostos.bin da particao spiffs, que sobrevive a desligar e a regravar o firmware.
+#define APR_MAX 80                 // amostras no total (80 x 2 KB na PSRAM)
+#define APR_POR_PESSOA 15          // teto por pessoa: a mais antiga da lugar a nova
+#define APR_INICIAIS 5             // amostras tiradas ao aprender um nome
+#define APR_INTERVALO_MS 600       // entre uma amostra e outra ao aprender
+#define APR_PRAZO_MS 30000         // tempo para conseguir as amostras iniciais
+#define APR_AUTO_MIN 0.60f         // reconhecido com certeza media: vale mais uma amostra
+#define APR_AUTO_MAX 0.80f         // acima disso a amostra nao ensina nada novo
+#define APR_AUTO_INTERVALO_MS 30000
+#define APR_ROSTO_MIN_PX 50        // rosto menor que isso (largura) nao serve de amostra
+#define APR_NOME_MAX 32
+#define APR_DIM_MAX 512
+#define APR_ARQUIVO "/rostos.bin"
+
+struct Amostra { char nome[APR_NOME_MAX]; float emb[APR_DIM_MAX]; };
+static Amostra *apr = NULL;
+static int apr_n = 0, apr_dim = 0;
+static SemaphoreHandle_t apr_mutex;
+static char apr_aprendendo[APR_NOME_MAX] = "";  // "" = nao esta aprendendo ninguem
+static int apr_faltam = 0, apr_tiradas = 0;
+static uint32_t apr_ultima = 0, apr_inicio = 0, apr_auto_ultima = 0, apr_mudou_em = 0;
+static volatile bool apr_sujo = false;          // precisa gravar o arquivo
+static bool fs_ok = false;
+
+// Nome seguro para JSON e arquivo: sem aspas/barras/controle, ate 31 bytes sem partir UTF-8.
+static void apr_limpa_nome(char *dst, const char *src) {
+  int k = 0;
+  while (*src == ' ') src++;
+  for (; *src && k < APR_NOME_MAX - 1; src++) {
+    unsigned char ch = *src;
+    if (ch < 32 || ch == '"' || ch == '\\' || ch == ';') continue;
+    dst[k++] = ch;
+  }
+  // nao corta caractere acentuado ao meio: se o ultimo ficou incompleto, sai inteiro
+  int j = k - 1;
+  while (j > 0 && ((unsigned char)dst[j] & 0xC0) == 0x80) j--;
+  if (j >= 0) {
+    unsigned char lead = dst[j];
+    int len = lead < 0x80 ? 1 : (lead >> 5) == 6 ? 2 : (lead >> 4) == 14 ? 3 : 4;
+    if (j + len > k) k = j;
+  }
+  while (k > 0 && dst[k - 1] == ' ') k--;
+  dst[k] = 0;
+}
+
+static int apr_conta(const char *nome) {
+  int c = 0;
+  for (int i = 0; i < apr_n; i++) if (!strcasecmp(apr[i].nome, nome)) c++;
+  return c;
+}
+
+static float apr_cosseno(const float *a, const float *b, int dim) {
+  float ab = 0, aa = 0, bb = 0;
+  for (int i = 0; i < dim; i++) { ab += a[i] * b[i]; aa += a[i] * a[i]; bb += b[i] * b[i]; }
+  return (aa > 0 && bb > 0) ? ab / sqrtf(aa * bb) : -1.0f;
+}
+
+// Amostra mais parecida com o rosto (-1 se nao ha amostras). Chamar com apr_mutex.
+static int apr_melhor(const float *e, int dim, float *sim) {
+  int bi = -1; *sim = -1.0f;
+  if (dim != apr_dim) return -1;
+  for (int i = 0; i < apr_n; i++) {
+    float s = apr_cosseno(e, apr[i].emb, dim);
+    if (s > *sim) { *sim = s; bi = i; }
+  }
+  return bi;
+}
+
+// Junta uma amostra. Com a pessoa no teto, a amostra mais antiga dela da lugar. Chamar com apr_mutex.
+static bool apr_adiciona(const char *nome, const float *e, int dim) {
+  if (!apr || dim > APR_DIM_MAX || (apr_dim && dim != apr_dim)) return false;
+  int alvo = -1;
+  if (apr_conta(nome) >= APR_POR_PESSOA) {
+    for (int i = 0; i < apr_n; i++) if (!strcasecmp(apr[i].nome, nome)) { alvo = i; break; }
+    memmove(&apr[alvo], &apr[alvo + 1], (apr_n - alvo - 1) * sizeof(Amostra));
+    alvo = apr_n - 1;
+  } else if (apr_n < APR_MAX) {
+    alvo = apr_n++;
+  } else {
+    LOGF("[rosto] memoria de rostos cheia (%d amostras): use 'esquecer <nome>'", APR_MAX);
+    return false;
+  }
+  apr_dim = dim;
+  strncpy(apr[alvo].nome, nome, APR_NOME_MAX - 1);
+  apr[alvo].nome[APR_NOME_MAX - 1] = 0;
+  memcpy(apr[alvo].emb, e, dim * sizeof(float));
+  apr_sujo = true; apr_mudou_em = millis();
+  return true;
+}
+
+static int apr_esquece(const char *nome) {
+  xSemaphoreTake(apr_mutex, portMAX_DELAY);
+  int k = 0, tirou = 0;
+  for (int i = 0; i < apr_n; i++) {
+    if (!strcasecmp(apr[i].nome, nome)) { tirou++; continue; }
+    if (k != i) apr[k] = apr[i];
+    k++;
+  }
+  apr_n = k;
+  if (tirou) { apr_sujo = true; apr_mudou_em = millis(); }
+  xSemaphoreGive(apr_mutex);
+  return tirou;
+}
+
+static void apr_grava() {
+  if (!fs_ok) return;
+  // copia e solta o mutex: a escrita na flash leva segundos e a camera nao pode esperar
+  xSemaphoreTake(apr_mutex, portMAX_DELAY);
+  int n = apr_n, dim = apr_dim;
+  Amostra *copia = n ? (Amostra *)ps_malloc(n * sizeof(Amostra)) : NULL;
+  if (copia) memcpy(copia, apr, n * sizeof(Amostra));
+  apr_sujo = false;
+  xSemaphoreGive(apr_mutex);
+  if (n && !copia) { apr_sujo = true; return; }
+  File f = LittleFS.open(APR_ARQUIVO, "w");
+  if (!f) { apr_sujo = true; free(copia); return; }
+  f.write((const uint8_t *)"ROS1", 4);
+  f.write((const uint8_t *)&dim, 4);
+  f.write((const uint8_t *)&n, 4);
+  for (int i = 0; i < n; i++) {
+    f.write((const uint8_t *)copia[i].nome, APR_NOME_MAX);
+    f.write((const uint8_t *)copia[i].emb, dim * sizeof(float));
+  }
+  f.close();
+  free(copia);
+  LOGF("[rosto] %d amostras gravadas na flash", n);
+}
+
+static void apr_carrega() {
+  apr = (Amostra *)ps_malloc(APR_MAX * sizeof(Amostra));
+  fs_ok = LittleFS.begin(true);  // particao spiffs; formata na primeira vez
+  if (!apr || !fs_ok) { LOGF("[rosto] sem memoria para rostos aprendidos (psram=%d fs=%d)", apr != NULL, fs_ok); return; }
+  File f = LittleFS.open(APR_ARQUIVO, "r");
+  if (!f) { LOGF("[rosto] nenhum rosto aprendido ainda"); return; }
+  char mag[4]; int dim = 0, n = 0;
+  if (f.read((uint8_t *)mag, 4) == 4 && !memcmp(mag, "ROS1", 4) && f.read((uint8_t *)&dim, 4) == 4 &&
+      f.read((uint8_t *)&n, 4) == 4 && dim > 0 && dim <= APR_DIM_MAX && n >= 0 && n <= APR_MAX) {
+    int lidas = 0;
+    for (; lidas < n; lidas++) {
+      if (f.read((uint8_t *)apr[lidas].nome, APR_NOME_MAX) != APR_NOME_MAX) break;
+      if (f.read((uint8_t *)apr[lidas].emb, dim * sizeof(float)) != dim * sizeof(float)) break;
+      apr[lidas].nome[APR_NOME_MAX - 1] = 0;
+    }
+    apr_n = lidas; apr_dim = dim;
+  }
+  f.close();
+  String quem = "";
+  for (int i = 0; i < apr_n; i++)
+    if (quem.indexOf(String(apr[i].nome) + " (") < 0) quem += String(apr[i].nome) + " (" + apr_conta(apr[i].nome) + ") ";
+  LOGF("[rosto] %d amostras aprendidas carregadas: %s", apr_n, apr_n ? quem.c_str() : "-");
+}
+
+// Comecar a aprender um nome (comando "aprender <nome>"). A camera fica acordada ate terminar.
+void vision_wake(uint32_t ms);
+static void apr_comeca(const char *bruto) {
+  char nome[APR_NOME_MAX];
+  apr_limpa_nome(nome, bruto);
+  if (!nome[0] || !strcasecmp(nome, NAME_UNKNOWN)) { LOGF("[rosto] nome invalido para aprender"); return; }
+  xSemaphoreTake(apr_mutex, portMAX_DELAY);
+  strcpy(apr_aprendendo, nome);
+  apr_faltam = APR_INICIAIS; apr_tiradas = 0; apr_inicio = millis(); apr_ultima = 0;
+  xSemaphoreGive(apr_mutex);
+  vision_wake(APR_PRAZO_MS + 2000);
+  LOGF("[rosto] aprendendo '%s': olhe para a camera (%d amostras)", nome, APR_INICIAIS);
+}
+
 // ---------- ultimo quadro processado (compartilhado entre tarefas) ----------
 static SemaphoreHandle_t frame_mutex;
 static uint8_t *last_jpg = NULL;
 static size_t last_jpg_len = 0;
 static volatile uint32_t frame_id = 0;
 static volatile float fps = 0;
-static char faces_json[512] = "{\"faces\":0,\"fps\":0,\"list\":[]}";
+static char faces_json[1024] = "{\"faces\":0,\"fps\":0,\"list\":[]}";
 
 // ---------- energia da camera ----------
 // A camera + IA de rosto (7,5 quadros/s, JPEG, PSRAM, clock de 20 MHz) atrapalhava o Wi-Fi.
@@ -250,24 +422,84 @@ static void vision_task(void *) {
 
     String list = "", report = "", names_now = "";
     int n = 0, best_area = 0, best_cx = 0, best_cy = 0;
+    // do maior rosto: o vetor (para aprender), quem e e com que certeza
+    static float *emb_maior = (float *)ps_malloc(APR_DIM_MAX * sizeof(float));  // PSRAM: a interna e curta
+    int dim_maior = 0, larg_maior = 0;
+    char nome_maior[APR_NOME_MAX] = "";
+    float sim_maior = -1.0f;
+    bool maior_aprendido = false;
     for (auto &r : res) {
       int area = (r.box[2] - r.box[0]) * (r.box[3] - r.box[1]);
-      if (area > best_area) { best_area = area; best_cx = (r.box[0] + r.box[2]) / 2; best_cy = (r.box[1] + r.box[3]) / 2; }
       face_info_t id;
       id.id = -1; id.similarity = -1.0f;  // sem rostos cadastrados (fotos ausentes): todo mundo e "Creatura"
-      if (recognizer->get_enrolled_id_num() > 0) id = recognizer->recognize(img, shape, r.keypoint);
-      bool known = id.similarity >= MATCH_THRESHOLD;
-      const char *name = known ? NAME_KNOWN : NAME_UNKNOWN;
+      int dim = 0;
+      float sim_apr = -1.0f;
+      char name[APR_NOME_MAX];
+      strcpy(name, NAME_UNKNOWN);
+      bool learned = false;
+      if (recognizer->get_enrolled_id_num() > 0) {
+        id = recognizer->recognize(img, shape, r.keypoint);
+        // o vetor deste rosto (o modelo guarda o da ultima imagem reconhecida)
+        Tensor<float> &e = recognizer->get_face_emb(-1);
+        dim = e.get_size();
+        if (dim > 0 && dim <= APR_DIM_MAX) {
+          xSemaphoreTake(apr_mutex, portMAX_DELAY);
+          int bi = apr_melhor(e.element, dim, &sim_apr);
+          if (bi >= 0 && sim_apr >= MATCH_THRESHOLD && sim_apr >= id.similarity) {
+            strcpy(name, apr[bi].nome);
+            learned = true;
+          }
+          xSemaphoreGive(apr_mutex);
+          if (area > best_area) memcpy(emb_maior, e.element, dim * sizeof(float));
+        } else dim = 0;
+      }
+      float sim = learned ? sim_apr : id.similarity;
+      bool known = learned || id.similarity >= MATCH_THRESHOLD;
+      if (!learned && known) strcpy(name, NAME_KNOWN);
+      if (!known) sim = max(id.similarity, sim_apr);
+      if (area > best_area) {
+        best_area = area; best_cx = (r.box[0] + r.box[2]) / 2; best_cy = (r.box[1] + r.box[3]) / 2;
+        dim_maior = dim; larg_maior = r.box[2] - r.box[0];
+        strcpy(nome_maior, name); sim_maior = sim; maior_aprendido = learned;
+      }
       uint16_t color = known ? C_GREEN : C_RED;
       int x1 = r.box[0], y1 = r.box[1], x2 = r.box[2], y2 = r.box[3];
       draw_box(img, x1, y1, x2, y2, color);
-      draw_label(img, name, x1, y1, y2, color);
+      // a fonte da imagem so tem as letras dos dois nomes fixos; nomes aprendidos vao no JSON
+      if (!learned) draw_label(img, name, x1, y1, y2, color);
       if (n) { list += ","; report += ", "; }
-      list += "{\"name\":\"" + String(name) + "\",\"sim\":" + String(id.similarity, 2) + "}";
-      report += String(name) + " (" + String(id.similarity, 2) + ")";
+      list += "{\"name\":\"" + String(name) + "\",\"sim\":" + String(sim, 2) + "}";
+      report += String(name) + " (" + String(sim, 2) + ")";
       names_now += String(name) + ";";
       n++;
     }
+
+    // Aprender: so com UM rosto no quadro (para nao guardar a pessoa errada) e grande o bastante.
+    uint32_t agora = millis();
+    xSemaphoreTake(apr_mutex, portMAX_DELAY);
+    if (apr_aprendendo[0]) {
+      if (n == 1 && dim_maior > 0 && larg_maior >= APR_ROSTO_MIN_PX && agora - apr_ultima >= APR_INTERVALO_MS) {
+        if (apr_adiciona(apr_aprendendo, emb_maior, dim_maior)) {
+          apr_ultima = agora; apr_tiradas++; apr_faltam--;
+          LOGF("[rosto] amostra %d de %d de '%s'", apr_tiradas, APR_INICIAIS, apr_aprendendo);
+        }
+      }
+      if (apr_faltam <= 0 || agora - apr_inicio > APR_PRAZO_MS) {
+        if (apr_tiradas) LOGF("[rosto] aprendi '%s' (%d amostras)", apr_aprendendo, apr_conta(apr_aprendendo));
+        else LOGF("[rosto] nao consegui aprender '%s': nenhum rosto sozinho e de frente em %d s",
+                  apr_aprendendo, APR_PRAZO_MS / 1000);
+        apr_aprendendo[0] = 0; apr_faltam = 0;
+      }
+    } else if (n == 1 && maior_aprendido && dim_maior > 0 && larg_maior >= APR_ROSTO_MIN_PX &&
+               sim_maior >= APR_AUTO_MIN && sim_maior < APR_AUTO_MAX &&
+               agora - apr_auto_ultima >= APR_AUTO_INTERVALO_MS) {
+      // reconhecido, mas com certeza media: este rosto ensina algo novo (outro angulo, outra luz)
+      if (apr_adiciona(nome_maior, emb_maior, dim_maior)) {
+        apr_auto_ultima = agora;
+        LOGF("[rosto] mais uma amostra de '%s' (certeza %.2f, agora %d)", nome_maior, sim_maior, apr_conta(nome_maior));
+      }
+    }
+    xSemaphoreGive(apr_mutex);
 
     if (best_area > 0) robo_track_face(best_cx, best_cy, fb->width, fb->height);
 
@@ -282,8 +514,10 @@ static void vision_task(void *) {
     xSemaphoreTake(frame_mutex, portMAX_DELAY);
     if (ok) { free(last_jpg); last_jpg = jpg; last_jpg_len = jlen; frame_id++; }
     snprintf(faces_json, sizeof(faces_json),
-             "{\"faces\":%d,\"fps\":%.1f,\"list\":[%s],\"pan\":%d,\"tilt\":%d,\"track\":%d,\"speaking\":%d}",
-             n, fps, list.c_str(), robo_pan(), robo_tilt(), robo_tracking(), robo_speaking());
+             "{\"faces\":%d,\"fps\":%.1f,\"list\":[%s],\"pan\":%d,\"tilt\":%d,\"track\":%d,\"speaking\":%d,"
+             "\"aprendendo\":\"%s\",\"faltam\":%d}",
+             n, fps, list.c_str(), robo_pan(), robo_tilt(), robo_tracking(), robo_speaking(),
+             apr_aprendendo, apr_faltam);
     xSemaphoreGive(frame_mutex);
 
     // so loga quando muda quem esta na frente da camera
@@ -325,7 +559,7 @@ static esp_err_t index_handler(httpd_req_t *req) {
 }
 
 static esp_err_t faces_handler(httpd_req_t *req) {
-  char buf[512];
+  char buf[sizeof(faces_json)];
   xSemaphoreTake(frame_mutex, portMAX_DELAY);
   strcpy(buf, faces_json);
   xSemaphoreGive(frame_mutex);
@@ -530,7 +764,7 @@ static void on_link_cmd(const char *c) {
 }
 
 static void send_faces() {
-  char buf[512];
+  char buf[sizeof(faces_json)];
   xSemaphoreTake(frame_mutex, portMAX_DELAY);
   strcpy(buf, faces_json);
   xSemaphoreGive(frame_mutex);
@@ -553,6 +787,20 @@ static void cmd_task(void *) {
       send_faces();
     } else if (!strcmp(c, "faces")) {
       send_faces();
+    } else if (!strncmp(c, "aprender ", 9)) {
+      apr_comeca(c + 9);
+    } else if (!strncmp(c, "esquecer ", 9)) {
+      char nome[APR_NOME_MAX];
+      apr_limpa_nome(nome, c + 9);
+      int t = apr_esquece(nome);
+      LOGF("[rosto] esqueci '%s' (%d amostras apagadas)", nome, t);
+    } else if (!strcmp(c, "pessoas")) {
+      String quem = "";
+      xSemaphoreTake(apr_mutex, portMAX_DELAY);
+      for (int i = 0; i < apr_n; i++)
+        if (quem.indexOf(String(apr[i].nome) + " (") < 0) quem += String(apr[i].nome) + " (" + apr_conta(apr[i].nome) + ") ";
+      xSemaphoreGive(apr_mutex);
+      LOGF("[rosto] conhecidos: %s (fotos) %s", NAME_KNOWN, quem.c_str());
     } else if (sscanf(c, "wake %d", &x) == 1) {
       vision_wake(x);
     } else if (sscanf(c, "gesture %31s", a) == 1) {
@@ -599,6 +847,8 @@ void setup() {
   recognizer = new FaceRecognition112V1S8();
   recognizer->set_thresh(MATCH_THRESHOLD);
   enroll_from_photos();
+  apr_mutex = xSemaphoreCreateMutex();
+  apr_carrega();
 
   frame_mutex = xSemaphoreCreateMutex();
   xTaskCreatePinnedToCore(vision_task, "vision", 16 * 1024, NULL, 5, NULL, 1);
@@ -632,6 +882,9 @@ static void stop_own_ap() {
 }
 
 void loop() {
+  // Rostos aprendidos vao para a flash aqui, fora da tarefa da camera, sem ninguem aprendendo e
+  // com o alto-falante quieto: gravar flash pausa o cache e picotaria o audio.
+  if (apr_sujo && !apr_aprendendo[0] && !robo_speaking() && millis() - apr_mudou_em > 2000) apr_grava();
   static uint32_t t = 0;
   static bool was_connected = false;
   static uint32_t lost_since = 0, last_sta_try = 0;
