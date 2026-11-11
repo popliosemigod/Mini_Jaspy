@@ -305,6 +305,14 @@ static void spk_rx_task(void *) {
   }
 }
 
+// Volume ajustavel sem regravar (comando "volume 0-100"); comeca no SPK_VOLUME. O dono pediu o maximo
+// (11/11/2026): o robo.py manda "volume 100" ao conectar. Mais volume = mais corrente no MAX98357A.
+static volatile float spk_volume = SPK_VOLUME;
+void robo_set_volume(int pct) {
+  spk_volume = constrain(pct, 0, 100) / 100.0f;
+  LOGF("[spk] volume %d%%", constrain(pct, 0, 100));
+}
+
 static void spk_play_task(void *) {
   int16_t *in = (int16_t *)ps_malloc(512 * sizeof(int16_t));
   int16_t *st = (int16_t *)ps_malloc(1024 * sizeof(int16_t));
@@ -327,7 +335,7 @@ static void spk_play_task(void *) {
       }
       int n = got / 2;
       for (int i = 0; i < n; i++) {
-        int16_t v = (int16_t)(in[i] * SPK_VOLUME);
+        int16_t v = (int16_t)(in[i] * spk_volume);
         st[2 * i] = v; st[2 * i + 1] = v;
       }
       size_t w;

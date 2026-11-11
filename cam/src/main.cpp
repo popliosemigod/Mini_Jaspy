@@ -871,6 +871,8 @@ static void cmd_task(void *) {
       robo_set_servo_vel(x, y);
     } else if (!strcmp(c, "servodiag")) {
       robo_servo_diag();
+    } else if (sscanf(c, "volume %d", &x) == 1) {
+      robo_set_volume(x);
     } else if (sscanf(c, "track %d", &x) == 1) {
       robo_set_tracking(x);
     } else if (sscanf(c, "echo %d", &x) == 1) {

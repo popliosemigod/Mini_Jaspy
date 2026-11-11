@@ -20,6 +20,10 @@ ponte/logs/
 ponte/comandos.json
 ponte/maquina.json
 
+# Apresentacao: imagens dos slides (fotos de bancada) e audios gerados ficam locais
+apresentacao/slides/
+apresentacao/audio/
+
 # Gravacoes de audio dos testes
 ponte/testes/gravacoes/
 ponte/gravacoes/

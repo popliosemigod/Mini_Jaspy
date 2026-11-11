@@ -566,15 +566,15 @@ $s.Dispose()
 # ouvido pelo dono no alto-falante do robo em 11/11/2026 (masculina e suave). Sem internet, Maria.
 VOZ = "en-US-BrianMultilingualNeural"
 VOZ_RITMO = "+0%"
-VOZ_PICO = 0.55  # fracao da escala no pico (o firmware ainda multiplica por SPK_VOLUME)
+VOZ_PICO = 0.95  # fracao da escala no pico; o dono pediu o volume no maximo (11/11/2026)
 _TTS_DIR = os.path.join(tempfile.gettempdir(), f"robo_tts_{os.getpid()}")
 
 
-def _neural(text, wf):
+def _neural(text, wf, timeout=8):
     import miniaudio  # decodifica o MP3 do edge-tts sem ffmpeg
     mp3 = wf[:-4] + ".mp3"
     subprocess.run([sys.executable, "-m", "edge_tts", "--voice", VOZ, f"--rate={VOZ_RITMO}", "--text", text,
-                    "--write-media", mp3], check=True, capture_output=True, timeout=8)
+                    "--write-media", mp3], check=True, capture_output=True, timeout=timeout)
     d = miniaudio.decode_file(mp3, output_format=miniaudio.SampleFormat.SIGNED16, nchannels=1, sample_rate=RATE)
     # pico em VOZ_PICO da escala: o pico de corrente do amplificador derrubou o 5 V do USB e reiniciou
     # a placa no inicio de uma fala (11/11/2026)
@@ -764,6 +764,8 @@ def main():
     ap.add_argument("--voz", default=VOZ, help="voz neural do edge-tts (ex.: pt-BR-AntonioNeural)")
     ap.add_argument("--voz-ritmo", default=VOZ_RITMO, help="ritmo da voz neural (ex.: -10%%)")
     ap.add_argument("--voz-maria", action="store_true", help="usar so a voz Maria do Windows (sem internet)")
+    ap.add_argument("--volume-placa", type=int, default=100,
+                    help="volume do alto-falante na placa, 0 a 100 (padrao: maximo)")
     ap.add_argument("--servo-vel", default="10,20",
                     help="velocidade do pescoco em graus/s: 'seguir_rosto,gestos' (padrao 10,20)")
     ap.add_argument("--wifi", action="store_true",
@@ -848,6 +850,8 @@ def main():
         vel = [int(float(x)) for x in args.servo_vel.split(",")[:2]]
         servo_vel = f"servovel {vel[0]} {vel[-1]}"
         robot.cmd(servo_vel)
+        robot.cmd(f"volume {args.volume_placa}")
+        log(f"[boca] volume da placa: {args.volume_placa}%")
         log(f"[servo] velocidade do pescoco: seguir rosto {vel[0]} graus/s, gestos {vel[-1]} graus/s")
         camera_no_pc(robot)
     comandos = Comandos()
@@ -897,6 +901,7 @@ def main():
                                 robot.cmd("wifi 0")
                                 log("[wifi] Wi-Fi da placa desligado de novo")
                             robot.cmd(servo_vel)
+                            robot.cmd(f"volume {args.volume_placa}")
                         # placa desplugada: sai com 3 e o supervisor espera ela voltar
                         if usb and time.time() - ultima_porta > 2:
                             ultima_porta = time.time()

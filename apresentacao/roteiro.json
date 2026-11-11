@@ -1,0 +1,62 @@
+{
+  "titulo": "Do Protótipo ao Chão de Fábrica - A IA como copiloto do engenheiro",
+  "nota": "Roteiro falado pelo Jaspy. Cada slide tem trechos curtos (o alto-falante guarda ~20 s de fala por vez). Siglas escritas como se falam (I dois C, M C P) para a voz não tropeçar. Gestos: sim, nao, curioso, centro, nenhum.",
+  "slides": [
+    {
+      "slide": 1,
+      "trechos": [
+        {"gesto": "sim", "fala": "Boa noite, turma! Boa noite, professor Neemias! Eu sou o Jaspy, um robô de mesa, e hoje eu vou apresentar o seminário do Henrique Nepumuceno Meriguete, de Engenharia da Computação, aqui na disciplina de Engenharia Transformacional."},
+        {"gesto": "curioso", "fala": "O tema é: do protótipo ao chão de fábrica. A inteligência artificial como copiloto do engenheiro. E eu sou a prova viva desse tema."},
+        {"gesto": "sim", "fala": "O Henrique me criou inteirinho junto com o Claude, uma inteligência artificial. A minha estrutura, o diagrama de fiação, o firmware que roda na minha placa, o programa que me dá ouvidos, voz e olhos. Tudo foi desenvolvido conversando com a I.A."},
+        {"gesto": "centro", "fala": "Mas prestem atenção num detalhe: quem decidiu o que eu ia ser, quem montou, testou e conferiu cada peça foi o Henrique. A I.A. ajudou a fazer. O engenheiro continuou no comando."}
+      ]
+    },
+    {
+      "slide": 2,
+      "trechos": [
+        {"gesto": "curioso", "fala": "Agora pensem numa fábrica moderna. Ela tem milhares de sensores: de temperatura, de pressão, de vibração, de nível. E cada um desses sensores exige quatro coisas."},
+        {"gesto": "sim", "fala": "Uma placa eletrônica. Um firmware, que é o programa dentro dela. Uma calibração, para medir certo. E uma bateria ou fonte de energia, dimensionada para durar."},
+        {"gesto": "nao", "fala": "Feito à mão, isso leva dias de trabalho para cada tipo de sensor: desenhar a placa, escrever o código, calibrar e medir o consumo, um por um."},
+        {"gesto": "sim", "fala": "Com a I.A. como copiloto, esse trabalho cai para horas, e com menos erro. Não porque a I.A. seja mágica, mas porque ela faz rápido a parte repetitiva, e deixa o engenheiro focar no que realmente importa."}
+      ]
+    },
+    {
+      "slide": 3,
+      "trechos": [
+        {"gesto": "centro", "fala": "Aqui está um estudo de caso: o ciclo de vida de um sensor, com a I.A. participando de cada etapa."},
+        {"gesto": "sim", "fala": "Primeiro, a lista de materiais. Depois, o firmware, com os protocolos I dois C e S P I, e o modo de economia de energia. Em seguida, a gravação na placa, pela U S B ou pela serial."},
+        {"gesto": "sim", "fala": "Depois vem a calibração, ajustando o offset e o ganho. E por fim a energia: medir quantos miliampères o sensor puxa da bateria, para saber quanto tempo ele dura."},
+        {"gesto": "curioso", "fala": "Reparem na linha de baixo do slide: na bancada, o engenheiro só precisa de três coisas. A placa, um cabo U S B e um multímetro. O resto ele faz em parceria com o Claude, direto no terminal."},
+        {"gesto": "sim", "fala": "Comigo foi exatamente assim. Hoje mesmo, a I.A. gravou o meu firmware pelo cabo, mediu o sinal dos meus servos no próprio pino e corrigiu defeitos meus, enquanto o Henrique conferia na bancada."}
+      ]
+    },
+    {
+      "slide": 4,
+      "trechos": [
+        {"gesto": "curioso", "fala": "E aqui está a grande virada: a I.A. não fica mais só no chat, respondendo perguntas. Ela executa."},
+        {"gesto": "sim", "fala": "Ela se liga às ferramentas da empresa pelos conectores M C P. Ela fica de vigia nos logs, acompanhando o equipamento em tempo real. Ela faz varreduras na rede e nas portas."},
+        {"gesto": "sim", "fala": "Ela grava o firmware sozinha. E ela lê um datasheet inteiro, de centenas de páginas, em segundos. As fotos do slide são da bancada real onde isso acontece."},
+        {"gesto": "centro", "fala": "Mas olhem o que continua com o engenheiro: ele define o problema, confere o resultado, valida na bancada e assina o projeto. A I.A. executa. A responsabilidade continua sendo humana."}
+      ]
+    },
+    {
+      "slide": 5,
+      "trechos": [
+        {"gesto": "curioso", "fala": "Então, o que acontece com as profissões? Algumas tarefas encolhem: o trabalho braçal e repetitivo, como copiar código, montar planilha e conferir valor à mão."},
+        {"gesto": "sim", "fala": "O papel do engenheiro muda: ele vira revisor e arquiteto. É quem desenha o sistema, decide o caminho e garante que tudo está certo antes de ir para a fábrica."},
+        {"gesto": "sim", "fala": "E surgem funções novas: automação com I.A. e integração de agentes. Agentes como eu, que ouvem, enxergam, agem e até se reprogramam, sempre com a confirmação de um humano."},
+        {"gesto": "nao", "fala": "Mas existem barreiras, e elas são sérias. Sociais, porque empregos mudam. Éticas, porque alguém precisa responder pelas decisões. Econômicas, pelo custo de adotar."},
+        {"gesto": "nao", "fala": "De segurança e sigilo, porque os dados de uma indústria valem muito. E ambientais, porque a I.A. consome bastante energia. Adotar bem é tratar cada uma dessas barreiras."}
+      ]
+    },
+    {
+      "slide": 6,
+      "trechos": [
+        {"gesto": "centro", "fala": "Para fechar, uma provocação para o debate. A ameaça não é a I.A. A ameaça é o colega que domina a I.A."},
+        {"gesto": "sim", "fala": "A saída não é reprimir a tecnologia. É entender ela ao máximo, e continuar sendo o engenheiro que define, confere e assina."},
+        {"gesto": "sim", "fala": "Eu sou um exemplo disso: um robô feito em pouco tempo, por um estudante, com a I.A. como copiloto. Obrigado pela atenção!"},
+        {"gesto": "curioso", "fala": "E agora eu passo a palavra para vocês: quem aqui mudou de opinião?"}
+      ]
+    }
+  ]
+}

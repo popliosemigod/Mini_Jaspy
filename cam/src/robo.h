@@ -33,6 +33,7 @@ void robo_set_tracking(bool on);
 void robo_gesture(const char *name);  // "sim", "nao", "centro", "curioso"
 void robo_set_servo_vel(float rastreio, float gesto);  // graus/s (comando "servovel r g")
 void robo_servo_diag();  // mede o sinal nos pinos dos servos (comando "servodiag")
+void robo_set_volume(int pct);  // volume do alto-falante 0-100 (comando "volume N")
 int robo_pan();
 int robo_tilt();
 bool robo_tracking();
