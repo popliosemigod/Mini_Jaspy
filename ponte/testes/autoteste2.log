@@ -1,0 +1,105 @@
+13:21:19 Placa conectada pelo USB (COM22). Wi-Fi da placa: conectado 192.168.15.137
+13:21:19 [ouvidos] carregando Whisper 'small' (na primeira vez ele e baixado)...
+13:21:26 [ouvidos] Whisper pronto
+13:21:26 [ouvidos] ouvindo o microfone da placa (USB COM22)
+13:21:26 [cerebro] Claude (haiku) iniciado
+13:21:26 Pronto! Pode falar (Ctrl+C sai).
+13:21:27 [ouvidos] ruido de fundo medido: 466
+13:21:31 [autoteste] tocando a frase: "Olá robô, tudo bem com você?"
+13:21:35 [placa] [spk] tocando audio
+13:21:35 [ouvidos] voz detectada (nivel 2281, ruido 442)
+13:21:36 [placa] Sensor PID: 0x5640
+13:21:36 [placa] [camera] acordou em 747 ms
+13:21:38 [placa] [spk] fim
+13:21:43 [placa] [mic] lidas 16002 amostras/s, enviadas 0 amostras/s, estouros do buffer 0
+13:21:43 [placa] IP: http://192.168.15.137/  (WiFi OK, rede 'Wifi_2Solve', sinal -56 dBm canal 6) fps=7.5  RAM interna livre=38548 (maior bloco 26612, minimo 10720)
+13:21:43 [ouvidos] (4.7s) "Olá, Ropro. Tudo bem com você?"
+13:21:47 [cerebro] (4.4s) {"fala": "Olá, Rapaz bonito e inteligente! Tudo bem sim, obrigado por perguntar. Estou com a camera meio escura agora, nao consigo ver ninguem por aqui.", "gesto": "curioso", "olhar": null}
+13:21:47 [tempo] fim da fala -> inicio da resposta: 9.1s (ouvir+foto 4.7s, pensar 4.4s)
+13:21:49 [placa] [spk] tocando audio
+13:21:59 [placa] [camera] dormindo
+13:22:02 [placa] [spk] fim
+13:22:04 [autoteste] tocando a frase: "Qual é a capital do Brasil?"
+13:22:05 [placa] [spk] tocando audio
+13:22:06 [ouvidos] voz detectada (nivel 6941, ruido 435)
+13:22:06 [placa] Sensor PID: 0x5640
+13:22:06 [placa] [camera] acordou em 747 ms
+13:22:08 [placa] [spk] fim
+13:22:13 [placa] [mic] lidas 16003 amostras/s, enviadas 0 amostras/s, estouros do buffer 0
+13:22:13 [placa] IP: http://192.168.15.137/  (WiFi OK, rede 'Wifi_2Solve', sinal -56 dBm canal 6) fps=7.5  RAM interna livre=38548 (maior bloco 26612, minimo 10720)
+13:22:20 [ouvidos] (12.1s) "Qual é a capital do Brasil?"
+13:22:26 [cerebro] (5.9s) {"fala": "A capital do Brasil e Brasilia, Rapaz bonito e inteligente. Mas a minha camera continua bem escura, entao nao consigo ver quem esta falando comigo.", "gesto": "sim", "olhar": null}
+13:22:26 [tempo] fim da fala -> inicio da resposta: 18.0s (ouvir+foto 12.1s, pensar 5.9s)
+13:22:28 [placa] [camera] dormindo
+13:22:28 [placa] [spk] tocando audio
+13:22:41 [placa] [spk] fim
+13:22:42 [autoteste] tocando a frase: "O que você está vendo agora?"
+13:22:43 [placa] [spk] tocando audio
+13:22:43 [placa] [mic] lidas 16000 amostras/s, enviadas 0 amostras/s, estouros do buffer 0
+13:22:43 [placa] IP: http://192.168.15.137/  (WiFi OK, rede 'Wifi_2Solve', sinal -57 dBm canal 6) fps=0.0  RAM interna livre=72964 (maior bloco 32756, minimo 10720)
+13:22:44 [ouvidos] voz detectada (nivel 5596, ruido 476)
+13:22:45 [placa] Sensor PID: 0x5640
+13:22:45 [placa] [camera] acordou em 747 ms
+13:22:46 [placa] [spk] fim
+13:22:51 [ouvidos] (5.5s) "Você está vendo agora."
+13:22:56 [cerebro] (4.5s) {"fala": "Estou vendo, sim, mas so um breu com uma faixa clara a esquerda. Acho que a lente esta tampada ou o ambiente esta muito escuro, Rapaz bonito e inteligente.", "gesto": "curioso", "olhar": null}
+13:22:56 [tempo] fim da fala -> inicio da resposta: 10.1s (ouvir+foto 5.5s, pensar 4.5s)
+13:22:57 [placa] [spk] tocando audio
+13:23:06 [placa] [camera] dormindo
+13:23:10 [placa] [spk] fim
+13:23:12 [autoteste] tocando a frase: "Me conta uma curiosidade rápida sobre o espaço."
+13:23:13 [placa] [mic] lidas 16007 amostras/s, enviadas 0 amostras/s, estouros do buffer 0
+13:23:13 [placa] IP: http://192.168.15.137/  (WiFi OK, rede 'Wifi_2Solve', sinal -56 dBm canal 6) fps=0.0  RAM interna livre=72964 (maior bloco 32756, minimo 10720)
+13:23:14 [placa] [spk] tocando audio
+13:23:14 [ouvidos] voz detectada (nivel 1119, ruido 352)
+13:23:15 [placa] Sensor PID: 0x5640
+13:23:15 [placa] [camera] acordou em 747 ms
+13:23:18 [placa] [spk] fim
+13:23:38 [placa] [camera] dormindo
+13:23:41 [ouvidos] (23.2s) "Encontra uma curiosidade rápida sobre o espaço."
+13:23:43 [placa] [mic] lidas 16001 amostras/s, enviadas 0 amostras/s, estouros do buffer 0
+13:23:43 [placa] IP: http://192.168.15.137/  (WiFi OK, rede 'Wifi_2Solve', sinal -57 dBm canal 6) fps=0.0  RAM interna livre=72964 (maior bloco 32756, minimo 10720)
+13:23:45 [cerebro] (4.2s) {"fala": "Curiosidade rapida: um dia em Venus dura mais que um ano de Venus. Ele leva cerca de 243 dias terrestres para girar em torno de si mesmo, e cerca de 225 para dar a volta no Sol.", "gesto": "sim", "olhar": null}
+13:23:45 [tempo] fim da fala -> inicio da resposta: 27.5s (ouvir+foto 23.3s, pensar 4.2s)
+13:23:48 [placa] [spk] tocando audio
+13:24:05 [placa] [spk] fim
+13:24:07 [autoteste] tocando a frase: "Quanto é sete vezes oito?"
+13:24:08 [placa] [spk] tocando audio
+13:24:08 [ouvidos] voz detectada (nivel 3374, ruido 242)
+13:24:09 [placa] Sensor PID: 0x5640
+13:24:09 [placa] [camera] acordou em 747 ms
+13:24:11 [placa] [spk] fim
+13:24:13 [placa] [mic] lidas 15998 amostras/s, enviadas 0 amostras/s, estouros do buffer 0
+13:24:13 [placa] IP: http://192.168.15.137/  (WiFi OK, rede 'Wifi_2Solve', sinal -55 dBm canal 6) fps=7.4  RAM interna livre=38548 (maior bloco 26612, minimo 10720)
+13:24:14 [ouvidos] voz detectada (nivel 1107, ruido 248)
+13:24:22 [ouvidos] (11.2s) "Quando é 7 vezes 8?"
+13:24:26 [cerebro] (4.5s) {"fala": "Sete vezes oito e igual a cinquenta e seis, Rapaz bonito e inteligente. A conta eu faco de cabeca, mesmo com a camera no escuro.", "gesto": "sim", "olhar": null}
+13:24:26 [tempo] fim da fala -> inicio da resposta: 15.7s (ouvir+foto 11.2s, pensar 4.5s)
+13:24:28 [placa] [spk] tocando audio
+13:24:34 [placa] [camera] dormindo
+13:24:39 [placa] [spk] fim
+13:24:40 [placa] Sensor PID: 0x5640
+13:24:40 [placa] [camera] acordou em 747 ms
+13:24:43 [placa] [mic] lidas 16005 amostras/s, enviadas 0 amostras/s, estouros do buffer 0
+13:24:43 [placa] IP: http://192.168.15.137/  (WiFi OK, rede 'Wifi_2Solve', sinal -58 dBm canal 6) fps=7.4  RAM interna livre=38548 (maior bloco 26612, minimo 10720)
+13:24:45 [ouvidos] (5.8s) ""
+13:24:46 [autoteste] tocando a frase: "Obrigado, até logo!"
+13:24:48 [placa] [spk] tocando audio
+13:24:49 [ouvidos] voz detectada (nivel 1025, ruido 308)
+13:24:51 [placa] [spk] fim
+13:25:03 [ouvidos] (11.9s) "Obrigado, até logo."
+13:25:07 [cerebro] (4.0s) {"fala": "De nada, Rapaz bonito e inteligente! Ate logo, e cuida bem de voce.", "gesto": "sim", "olhar": null}
+13:25:07 [tempo] fim da fala -> inicio da resposta: 15.9s (ouvir+foto 12.0s, pensar 4.0s)
+13:25:08 [placa] [spk] tocando audio
+13:25:11 [placa] [camera] dormindo
+13:25:13 [placa] [mic] lidas 16001 amostras/s, enviadas 0 amostras/s, estouros do buffer 0
+13:25:13 [placa] IP: http://192.168.15.137/  (WiFi OK, rede 'Wifi_2Solve', sinal -54 dBm canal 6) fps=0.0  RAM interna livre=72964 (maior bloco 32756, minimo 10720)
+13:25:16 [placa] [spk] fim
+13:25:16 [autoteste] FIM
+13:25:17 [autoteste] RESULTADO:
+13:25:17    frase: 'Olá robô, tudo bem com você?' | ouviu: 'Olá, Ropro. Tudo bem com você?' | latencia: 9.1 s | foto: True | resposta: 'Olá, Rapaz bonito e inteligente! Tudo bem sim, obrigado por perguntar. Estou com a camera meio escura agora, nao consigo ver ninguem por aqui.'
+13:25:17    frase: 'Qual é a capital do Brasil?' | ouviu: 'Qual é a capital do Brasil?' | latencia: 18.0 s | foto: True | resposta: 'A capital do Brasil e Brasilia, Rapaz bonito e inteligente. Mas a minha camera continua bem escura, entao nao consigo ver quem esta falando comigo.'
+13:25:17    frase: 'O que você está vendo agora?' | ouviu: 'Você está vendo agora.' | latencia: 10.1 s | foto: True | resposta: 'Estou vendo, sim, mas so um breu com uma faixa clara a esquerda. Acho que a lente esta tampada ou o ambiente esta muito escuro, Rapaz bonito e inteligente.'
+13:25:17    frase: 'Me conta uma curiosidade rápida sobre o espaço.' | ouviu: 'Encontra uma curiosidade rápida sobre o espaço.' | latencia: 27.5 s | foto: True | resposta: 'Curiosidade rapida: um dia em Venus dura mais que um ano de Venus. Ele leva cerca de 243 dias terrestres para girar em torno de si mesmo, e cerca de 225 para dar a volta no Sol.'
+13:25:17    frase: 'Quanto é sete vezes oito?' | ouviu: 'Quando é 7 vezes 8?' | latencia: 15.7 s | foto: True | resposta: 'Sete vezes oito e igual a cinquenta e seis, Rapaz bonito e inteligente. A conta eu faco de cabeca, mesmo com a camera no escuro.'
+13:25:17    frase: 'Obrigado, até logo!' | ouviu: 'Obrigado, até logo.' | latencia: 15.9 s | foto: True | resposta: 'De nada, Rapaz bonito e inteligente! Ate logo, e cuida bem de voce.'

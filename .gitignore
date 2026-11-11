@@ -1,0 +1,30 @@
+# ===== Repositorio PUBLICO: nada de senhas, fotos de pessoas ou dados pessoais =====
+
+# Senhas de Wi-Fi (copie cam/src/wifi_redes_exemplo.h -> wifi_redes.h e preencha localmente)
+cam/src/wifi_redes.h
+
+# Fotos de rosto da pessoa cadastrada (privacidade). Sem elas o build usa imagens cinza
+# (cam/scripts/fotos_padrao.py) e ninguem e reconhecido. Leve-as por meio pessoal se precisar.
+fotos_cadastro/
+cam/data/
+
+# Conversa exportada bruta (tem e-mails, caminhos do PC, senhas e imagens).
+# A versao legivel e sem senhas e historico/conversa_legivel.md
+historico/*.zip
+
+# Gravacoes de audio dos testes
+ponte/testes/gravacoes/
+ponte/gravacoes/
+
+# Gerados / baixados automaticamente
+.venv/
+ponte/modelos/
+modelos/
+cam/.pio/
+.pio/
+__pycache__/
+*.pyc
+*.npy
+capture_teste.jpg
+capture_usb.jpg
+*.zip

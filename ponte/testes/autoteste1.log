@@ -1,0 +1,27 @@
+13:14:58 Placa conectada pelo USB (COM22). Wi-Fi da placa: conectado 192.168.15.137
+13:15:05 [ouvidos] carregando Whisper 'small' (na primeira vez ele e baixado)...
+13:15:10 [ouvidos] Whisper pronto
+13:15:10 [ouvidos] ouvindo o microfone da placa (USB COM22)
+13:15:10 [cerebro] Claude (haiku) iniciado
+13:15:10 Pronto! Pode falar (Ctrl+C sai).
+13:15:11 [ouvidos] ruido de fundo medido: 162
+13:15:15 [autoteste] tocando a frase: "Olá robô, tudo bem com você?"
+13:15:27 [ouvidos] (5.3s) "Olá, Robô. Tudo bem com você?"
+13:15:32 [cerebro] (4.8s) {"fala": "Ola, Rapaz bonito e inteligente! Estou bem, obrigado por perguntar. Mas, no momento, nao estou vendo ninguem na camera, so uma tela bem escura. Sera que a luz esta apagada?", "gesto": "curioso", "olhar": null}
+13:15:32 [tempo] fim da fala -> inicio da resposta: 10.1s (ouvir+foto 5.3s, pensar 4.8s)
+13:15:51 [autoteste] tocando a frase: "Qual é a capital do Brasil?"
+13:16:01 [ouvidos] (5.2s) "Qual é a capital do Brasil?"
+13:16:04 [cerebro] (3.8s) {"fala": "A capital do Brasil e Brasilia, Rapaz bonito e inteligente. Ela foi inaugurada em 1960 para substituir o Rio de Janeiro no posto de capital federal. Agora, se puder, acenda a luz para eu enxergar voce direito!", "gesto": "sim", "olhar": null}
+13:16:04 [tempo] fim da fala -> inicio da resposta: 8.9s (ouvir+foto 5.2s, pensar 3.8s)
+13:16:26 [autoteste] tocando a frase: "O que você está vendo agora?"
+13:16:37 [ouvidos] (6.6s) "Está vendo agora."
+13:16:42 [cerebro] (4.4s) {"fala": "Hmm, eu ainda nao vejo ninguem, a imagem continua bem escura. Pode aproximar o rosto da camera ou acender a luz do ambiente, Rapaz bonito e inteligente?", "gesto": "nao", "olhar": null}
+13:16:42 [tempo] fim da fala -> inicio da resposta: 10.9s (ouvir+foto 6.6s, pensar 4.4s)
+13:16:57 [autoteste] tocando a frase: "Me conta uma curiosidade rápida sobre o espaço."
+13:18:33 [autoteste] robo nao respondeu em 90 s
+13:18:33 [autoteste] FIM
+13:18:33 [autoteste] RESULTADO:
+13:18:33    frase: 'Olá robô, tudo bem com você?' | ouviu: 'Olá, Robô. Tudo bem com você?' | latencia: 10.1 s | foto: True | resposta: 'Ola, Rapaz bonito e inteligente! Estou bem, obrigado por perguntar. Mas, no momento, nao estou vendo ninguem na camera, so uma tela bem escura. Sera que a luz esta apagada?'
+13:18:33    frase: 'Qual é a capital do Brasil?' | ouviu: 'Qual é a capital do Brasil?' | latencia: 8.9 s | foto: True | resposta: 'A capital do Brasil e Brasilia, Rapaz bonito e inteligente. Ela foi inaugurada em 1960 para substituir o Rio de Janeiro no posto de capital federal. Agora, se puder, acenda a luz para eu enxergar voce direito!'
+13:18:33    frase: 'O que você está vendo agora?' | ouviu: 'Está vendo agora.' | latencia: 10.9 s | foto: True | resposta: 'Hmm, eu ainda nao vejo ninguem, a imagem continua bem escura. Pode aproximar o rosto da camera ou acender a luz do ambiente, Rapaz bonito e inteligente?'
+13:18:33    frase: 'Me conta uma curiosidade rápida sobre o espaço.' | ouviu: None | latencia: None s | foto: None | resposta: None

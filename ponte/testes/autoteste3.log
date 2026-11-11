@@ -1,0 +1,150 @@
+13:38:34 Placa conectada pelo USB (COM22). Wi-Fi da placa: conectado 192.168.15.137
+13:38:35 [ouvidos] carregando Whisper 'small' (na primeira vez ele e baixado)...
+13:38:39 [ouvidos] Whisper pronto
+13:38:39 [ouvidos] ouvindo o microfone da placa (USB COM22)
+13:38:39 [cerebro] Claude (haiku) iniciado
+13:38:39 Pronto! Pode falar (Ctrl+C sai).
+13:38:40 [ouvidos] ruido de fundo medido: 284
+13:38:43 [placa] [mic] lidas 15999 amostras/s, enviadas 0 amostras/s, estouros do buffer 0
+13:38:43 [placa] IP: http://192.168.15.137/  (WiFi OK, rede 'Wifi_2Solve', sinal -50 dBm canal 6) fps=0.0  RAM interna livre=72964 (maior bloco 32756, minimo 10720)
+13:38:44 [autoteste] tocando a frase: "Oi robô, como foi o seu dia?"
+13:38:47 [placa] [spk] tocando audio
+13:38:47 [ouvidos] voz detectada (nivel 3493, ruido 210)
+13:38:48 [placa] Sensor PID: 0x5640
+13:38:48 [placa] [camera] acordou em 747 ms
+13:38:50 [placa] [spk] fim
+13:38:53 [ouvidos] voz detectada (nivel 731, ruido 229)
+13:38:58 [ouvidos] (7.2s) "Foi robô como foi o seu dia."
+13:39:03 [cerebro] (5.1s) {"fala": "Meu dia foi cheio de curiosidade, Rapaz bonito e inteligente! Fiquei olhando o mundo pela camera e pensando em coisas. E o seu, como foi?", "gesto": "sim", "olhar": null}
+13:39:03 [tempo] fim da fala -> inicio da resposta: 12.4s (ouvir+foto 7.2s, pensar 5.1s)
+13:39:04 [placa] [spk] tocando audio
+13:39:14 [placa] [camera] dormindo
+13:39:14 [placa] [mic] lidas 16006 amostras/s, enviadas 0 amostras/s, estouros do buffer 0
+13:39:14 [placa] IP: http://192.168.15.137/  (WiFi OK, rede 'Wifi_2Solve', sinal -52 dBm canal 6) fps=0.0  RAM interna livre=72916 (maior bloco 32756, minimo 10720)
+13:39:17 [placa] [spk] fim
+13:39:18 [placa] Sensor PID: 0x5640
+13:39:18 [placa] [camera] acordou em 747 ms
+13:39:24 [ouvidos] (6.7s) ""
+13:39:25 [autoteste] tocando a frase: "Quantos dias tem uma semana?"
+13:39:25 [ouvidos] voz detectada (nivel 828, ruido 181)
+13:39:26 [placa] [spk] tocando audio
+13:39:27 [ouvidos] voz detectada (nivel 3148, ruido 187)
+13:39:29 [placa] [spk] fim
+13:39:35 [ouvidos] (8.9s) ""
+13:39:43 [ouvidos] (8.0s) "Quantos dias tem uma semana?"
+13:39:44 [placa] [mic] lidas 16004 amostras/s, enviadas 0 amostras/s, estouros do buffer 0
+13:39:44 [placa] IP: http://192.168.15.137/  (WiFi OK, rede 'Wifi_2Solve', sinal -53 dBm canal 6) fps=7.5  RAM interna livre=38500 (maior bloco 26612, minimo 10720)
+13:39:46 [cerebro] (3.1s) {"fala": "Uma semana tem sete dias, Creatura curiosa! Se precisar de mais alguma contagem, pode perguntar.", "gesto": "sim", "olhar": null}
+13:39:46 [tempo] fim da fala -> inicio da resposta: 16.3s (ouvir+foto 13.3s, pensar 3.1s)
+13:39:47 [placa] [spk] tocando audio
+13:39:55 [placa] [camera] dormindo
+13:39:56 [placa] [spk] fim
+13:39:58 [autoteste] tocando a frase: "Você consegue me ver agora?"
+13:39:59 [placa] [spk] tocando audio
+13:39:59 [ouvidos] voz detectada (nivel 2563, ruido 387)
+13:40:00 [placa] Sensor PID: 0x5640
+13:40:00 [placa] [camera] acordou em 747 ms
+13:40:01 [placa] [spk] fim
+13:40:06 [ouvidos] (4.4s) "Você consegue me ver agora."
+13:40:09 [cerebro] (3.8s) {"fala": "Consigo ouvir voce, mas a imagem esta quase toda escura, Creatura. Acho que minha camera esta com pouca luz ou tampada.", "gesto": "curioso", "olhar": null}
+13:40:09 [tempo] fim da fala -> inicio da resposta: 8.2s (ouvir+foto 4.4s, pensar 3.8s)
+13:40:10 [placa] [spk] tocando audio
+13:40:14 [placa] [mic] lidas 15995 amostras/s, enviadas 0 amostras/s, estouros do buffer 0
+13:40:14 [placa] IP: http://192.168.15.137/  (WiFi OK, rede 'Wifi_2Solve', sinal -56 dBm canal 6) fps=7.5  RAM interna livre=38500 (maior bloco 26612, minimo 10720)
+13:40:21 [placa] [spk] fim
+13:40:22 [placa] [camera] dormindo
+13:40:22 [ouvidos] voz detectada (nivel 877, ruido 341)
+13:40:22 [autoteste] tocando a frase: "Conta uma piada bem curta."
+13:40:23 [placa] Sensor PID: 0x5640
+13:40:23 [placa] [camera] acordou em 747 ms
+13:40:23 [placa] [spk] tocando audio
+13:40:26 [placa] [spk] fim
+13:40:28 [ouvidos] voz detectada (nivel 1218, ruido 349)
+13:40:30 [ouvidos] (4.3s) "Então uma piada bem curta."
+13:40:33 [cerebro] (3.2s) {"fala": "Por que o computador foi ao medico? Porque ele estava com muitos virus, Creatura! Ha, ha!", "gesto": "sim", "olhar": null}
+13:40:33 [tempo] fim da fala -> inicio da resposta: 7.6s (ouvir+foto 4.3s, pensar 3.2s)
+13:40:34 [placa] [spk] tocando audio
+13:40:43 [placa] [spk] fim
+13:40:43 [ouvidos] voz detectada (nivel 1426, ruido 426)
+13:40:44 [placa] [mic] lidas 16008 amostras/s, enviadas 0 amostras/s, estouros do buffer 0
+13:40:44 [placa] IP: http://192.168.15.137/  (WiFi OK, rede 'Wifi_2Solve', sinal -54 dBm canal 6) fps=7.5  RAM interna livre=38500 (maior bloco 26612, minimo 10720)
+13:40:47 [ouvidos] (4.4s) ""
+13:40:49 [autoteste] tocando a frase: "Qual é o maior planeta do sistema solar?"
+13:40:49 [placa] [spk] tocando audio
+13:40:49 [ouvidos] voz detectada (nivel 1365, ruido 423)
+13:40:53 [placa] [spk] fim
+13:40:59 [ouvidos] voz detectada (nivel 1317, ruido 217)
+13:40:59 [ouvidos] (6.1s) "Qual é o maior suave da cidade?"
+13:41:01 [ouvidos] voz detectada (nivel 1345, ruido 225)
+13:41:04 [cerebro] (4.6s) {"fala": "Hmm, o maior suave da cidade? Nao sei essa, Creatura. Me conta a resposta, que eu adoro uma boa piada!", "gesto": "curioso", "olhar": null}
+13:41:04 [tempo] fim da fala -> inicio da resposta: 10.7s (ouvir+foto 6.1s, pensar 4.6s)
+13:41:05 [placa] [spk] tocando audio
+13:41:14 [placa] [mic] lidas 16002 amostras/s, enviadas 0 amostras/s, estouros do buffer 0
+13:41:14 [placa] IP: http://192.168.15.137/  (WiFi OK, rede 'Wifi_2Solve', sinal -53 dBm canal 6) fps=7.5  RAM interna livre=38500 (maior bloco 26612, minimo 10720)
+13:41:15 [placa] [spk] fim
+13:41:15 [ouvidos] voz detectada (nivel 2199, ruido 242)
+13:41:18 [ouvidos] voz detectada (nivel 746, ruido 263)
+13:41:20 [ouvidos] (5.2s) ""
+13:41:21 [autoteste] tocando a frase: "Valeu, tchau!"
+13:41:23 [ouvidos] voz detectada (nivel 933, ruido 286)
+13:41:23 [placa] [spk] tocando audio
+13:41:26 [placa] [spk] fim
+13:41:27 [ouvidos] (6.7s) "A gente pode não quantificar o que a gente processa."
+13:41:27 [ouvidos] voz detectada (nivel 1023, ruido 321)
+13:41:30 [cerebro] (3.8s) {"fala": "Essa e uma reflexao interessante, Creatura. Eu tambem nao sei contar tudo que processo por aqui, mas sei que cada conversa conta um pouco.", "gesto": "curioso", "olhar": null}
+13:41:30 [tempo] fim da fala -> inicio da resposta: 12.1s (ouvir+foto 8.3s, pensar 3.8s)
+13:41:31 [placa] [spk] tocando audio
+13:41:42 [placa] [spk] fim
+13:41:43 [ouvidos] voz detectada (nivel 2419, ruido 363)
+13:41:44 [placa] [mic] lidas 15998 amostras/s, enviadas 0 amostras/s, estouros do buffer 0
+13:41:44 [placa] IP: http://192.168.15.137/  (WiFi OK, rede 'Wifi_2Solve', sinal -59 dBm canal 6) fps=7.5  RAM interna livre=38500 (maior bloco 26612, minimo 10720)
+13:41:47 [ouvidos] voz detectada (nivel 1119, ruido 431)
+13:41:47 [ouvidos] (4.6s) ""
+13:41:47 [autoteste] FIM
+13:41:50 [ouvidos] voz detectada (nivel 1256, ruido 398)
+13:41:52 [ouvidos] (4.8s) "Valeu, tchau!"
+13:41:56 [cerebro] (3.5s) {"fala": "De nada, Creatura! Tchau, e volte logo para conversarmos mais.", "gesto": "sim", "olhar": null}
+13:41:56 [tempo] fim da fala -> inicio da resposta: 30.4s (ouvir+foto 26.8s, pensar 3.5s)
+13:41:56 [placa] [spk] tocando audio
+13:42:03 [placa] [spk] fim
+13:42:08 [ouvidos] (4.6s) ""
+13:42:09 [ouvidos] voz detectada (nivel 1420, ruido 372)
+13:42:13 [ouvidos] voz detectada (nivel 2262, ruido 402)
+13:42:14 [ouvidos] (5.9s) ""
+13:42:14 [placa] [mic] lidas 16005 amostras/s, enviadas 0 amostras/s, estouros do buffer 0
+13:42:14 [placa] IP: http://192.168.15.137/  (WiFi OK, rede 'Wifi_2Solve', sinal -54 dBm canal 6) fps=7.5  RAM interna livre=38500 (maior bloco 26612, minimo 10720)
+13:42:16 [ouvidos] voz detectada (nivel 1422, ruido 452)
+13:42:18 [ouvidos] voz detectada (nivel 1696, ruido 447)
+13:42:21 [ouvidos] (7.0s) ""
+13:42:28 [ouvidos] (7.7s) "Não precisa de usagens também."
+13:42:32 [cerebro] (3.8s) {"fala": "Ta bom, Creatura, sem usagens entao! Fico por aqui, mas estou sempre de olho no que acontece.", "gesto": "sim", "olhar": null}
+13:42:32 [tempo] fim da fala -> inicio da resposta: 17.3s (ouvir+foto 13.5s, pensar 3.8s)
+13:42:33 [ouvidos] voz detectada (nivel 3203, ruido 206)
+13:42:33 [placa] [spk] tocando audio
+13:42:42 [placa] [spk] fim
+13:42:43 [ouvidos] voz detectada (nivel 705, ruido 243)
+13:42:44 [placa] [mic] lidas 15995 amostras/s, enviadas 0 amostras/s, estouros do buffer 0
+13:42:44 [placa] IP: http://192.168.15.137/  (WiFi OK, rede 'Wifi_2Solve', sinal -58 dBm canal 6) fps=7.5  RAM interna livre=38500 (maior bloco 26612, minimo 10720)
+13:42:46 [ouvidos] voz detectada (nivel 1381, ruido 232)
+13:42:46 [ouvidos] (4.2s) ""
+13:42:50 [ouvidos] (4.4s) "A automática é expurviada."
+13:42:54 [cerebro] (3.5s) {"fala": "Hmm, nao entendi bem essa, Creatura. Pode repetir com outras palavras, por favor?", "gesto": "curioso", "olhar": null}
+13:42:54 [tempo] fim da fala -> inicio da resposta: 33.0s (ouvir+foto 29.5s, pensar 3.5s)
+13:42:55 [placa] [spk] tocando audio
+13:43:03 [placa] [spk] fim
+13:43:05 [ouvidos] voz detectada (nivel 1261, ruido 347)
+13:43:07 [ouvidos] (3.8s) ""
+13:43:11 [ouvidos] (4.2s) ""
+13:43:12 [ouvidos] voz detectada (nivel 544, ruido 213)
+13:43:14 [placa] [mic] lidas 16001 amostras/s, enviadas 0 amostras/s, estouros do buffer 0
+13:43:14 [placa] IP: http://192.168.15.137/  (WiFi OK, rede 'Wifi_2Solve', sinal -47 dBm canal 6) fps=7.5  RAM interna livre=38500 (maior bloco 26612, minimo 10720)
+13:43:16 [ouvidos] (4.7s) ""
+13:43:18 [ouvidos] voz detectada (nivel 952, ruido 275)
+13:43:21 [ouvidos] (4.6s) ""
+13:43:22 [autoteste] RESULTADO:
+13:43:22    frase: 'Oi robô, como foi o seu dia?' | ouviu: 'Foi robô como foi o seu dia.' | latencia: 12.4 s | foto: True | resposta: 'Meu dia foi cheio de curiosidade, Rapaz bonito e inteligente! Fiquei olhando o mundo pela camera e pensando em coisas. E o seu, como foi?'
+13:43:22    frase: 'Quantos dias tem uma semana?' | ouviu: 'Quantos dias tem uma semana?' | latencia: 16.3 s | foto: True | resposta: 'Uma semana tem sete dias, Creatura curiosa! Se precisar de mais alguma contagem, pode perguntar.'
+13:43:22    frase: 'Você consegue me ver agora?' | ouviu: 'Você consegue me ver agora.' | latencia: 8.2 s | foto: True | resposta: 'Consigo ouvir voce, mas a imagem esta quase toda escura, Creatura. Acho que minha camera esta com pouca luz ou tampada.'
+13:43:22    frase: 'Conta uma piada bem curta.' | ouviu: 'Então uma piada bem curta.' | latencia: 7.6 s | foto: True | resposta: 'Por que o computador foi ao medico? Porque ele estava com muitos virus, Creatura! Ha, ha!'
+13:43:22    frase: 'Qual é o maior planeta do sistema solar?' | ouviu: 'Qual é o maior suave da cidade?' | latencia: 10.7 s | foto: True | resposta: 'Hmm, o maior suave da cidade? Nao sei essa, Creatura. Me conta a resposta, que eu adoro uma boa piada!'
+13:43:22    frase: 'Valeu, tchau!' | ouviu: 'A gente pode não quantificar o que a gente processa.' | latencia: 12.1 s | foto: True | resposta: 'Essa e uma reflexao interessante, Creatura. Eu tambem nao sei contar tudo que processo por aqui, mas sei que cada conversa conta um pouco.'
