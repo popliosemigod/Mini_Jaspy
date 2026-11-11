@@ -31,6 +31,7 @@ void robo_track_face(int cx, int cy, int img_w, int img_h);  // chamado a cada q
 void robo_set_angles(int pan, int tilt);
 void robo_set_tracking(bool on);
 void robo_gesture(const char *name);  // "sim", "nao", "centro", "curioso"
+void robo_set_servo_vel(float rastreio, float gesto);  // graus/s (comando "servovel r g")
 int robo_pan();
 int robo_tilt();
 bool robo_tracking();

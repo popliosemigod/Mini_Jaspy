@@ -27,18 +27,25 @@ static float pan_now = 90, tilt_now = 90;
 static volatile bool tracking = true;
 static volatile uint32_t gesture_until = 0;
 
-// Velocidade maxima (graus/s) e freio suave: o pescoco estava agressivo
-// (125 graus/s seguindo o rosto, 300 nos gestos). Pedido do usuario em
-// 11/11/2026: "bem lentamente".
-#define SERVO_VEL_RASTREIO 20.0f  // seguindo o rosto
-#define SERVO_VEL_GESTO 45.0f     // sim / nao / curioso
-#define SERVO_FREIO 0.24f         // fracao do erro por passo de 20 ms: desacelera ao chegar
+// Velocidade maxima (graus/s) e freio suave. Historico (11/11/2026): 125 graus/s seguindo o rosto e
+// 300 nos gestos ("agressivo") -> 20 e 45 ("ainda muito rapido") -> 10 e 20. Ajustavel sem regravar:
+// comando "servovel <rastreio> <gesto>" (o robo.py manda a do --servo-vel ao conectar).
+static volatile float vel_rastreio = 10.0f;  // seguindo o rosto
+static volatile float vel_gesto = 20.0f;     // sim / nao / curioso / olhar
+#define SERVO_FREIO 0.24f                    // fracao do erro por passo de 20 ms: desacelera ao chegar
 
-// Cada passo do gesto dura o bastante para o servo chegar na velocidade de cima.
+// Cada passo do gesto dura o bastante para o servo chegar na velocidade de cima (12 graus a 20 graus/s
+// = 0,6 s, e o freio no fim).
 struct Key { int8_t dpan, dtilt; uint16_t ms; };
-static const Key G_SIM[] = {{0, 12, 800}, {0, -8, 800}, {0, 12, 800}, {0, -8, 800}, {0, 0, 800}};
-static const Key G_NAO[] = {{-15, 0, 800}, {15, 0, 800}, {-15, 0, 800}, {15, 0, 800}, {0, 0, 800}};
-static const Key G_CURIOSO[] = {{0, 0, 100}, {12, -8, 1200}, {0, 0, 1000}};
+static const Key G_SIM[] = {{0, 12, 1500}, {0, -8, 1500}, {0, 12, 1500}, {0, -8, 1500}, {0, 0, 1500}};
+static const Key G_NAO[] = {{-15, 0, 1500}, {15, 0, 1500}, {-15, 0, 1500}, {15, 0, 1500}, {0, 0, 1500}};
+static const Key G_CURIOSO[] = {{0, 0, 100}, {12, -8, 2000}, {0, 0, 1800}};
+
+void robo_set_servo_vel(float rastreio, float gesto) {
+  vel_rastreio = constrain(rastreio, 1.0f, 200.0f);
+  vel_gesto = constrain(gesto, 1.0f, 300.0f);
+  LOGF("[servo] velocidade: seguir rosto %.0f graus/s, gestos %.0f graus/s", vel_rastreio, vel_gesto);
+}
 static const Key *g_keys = NULL;
 static int g_len = 0;
 static float g_base_pan, g_base_tilt;
@@ -65,7 +72,7 @@ static void servo_task(void *) {
     } else g_i = 0, g_next = 0;
     // Passo de 20 ms: uma fracao do que falta (freia ao chegar), nunca acima
     // da velocidade maxima.
-    const float step = (g_keys ? SERVO_VEL_GESTO : SERVO_VEL_RASTREIO) * 0.020f;
+    const float step = (g_keys ? vel_gesto : vel_rastreio) * 0.020f;
     pan_now += constrain((pan_target - pan_now) * SERVO_FREIO, -step, step);
     tilt_now += constrain((tilt_target - tilt_now) * SERVO_FREIO, -step, step);
     servo_write(SERVO_CH_PAN, pan_now);
@@ -77,6 +84,7 @@ static void servo_task(void *) {
 void robo_set_angles(int pan, int tilt) {
   pan_target = constrain(pan, PAN_MIN, PAN_MAX);
   tilt_target = constrain(tilt, TILT_MIN, TILT_MAX);
+  LOGF("[servo] olhar: pan %d tilt %d (agora %d/%d)", (int)pan_target, (int)tilt_target, (int)pan_now, (int)tilt_now);
 }
 void robo_set_tracking(bool on) { tracking = on; }
 bool robo_tracking() { return tracking; }
@@ -92,6 +100,7 @@ void robo_gesture(const char *name) {
   if (!k) return;
   g_base_pan = pan_target; g_base_tilt = tilt_target;
   g_len = n; g_restart = true; g_keys = k;
+  LOGF("[servo] gesto '%s' a %.0f graus/s (de pan %d tilt %d)", name, vel_gesto, (int)pan_now, (int)tilt_now);
 }
 
 void robo_track_face(int cx, int cy, int img_w, int img_h) {
@@ -99,6 +108,13 @@ void robo_track_face(int cx, int cy, int img_w, int img_h) {
   int ex = cx - img_w / 2, ey = cy - img_h / 2;
   if (abs(ex) > 25) pan_target = constrain(pan_target - PAN_DIR * ex * 0.04f, PAN_MIN, PAN_MAX);
   if (abs(ey) > 20) tilt_target = constrain(tilt_target + TILT_DIR * ey * 0.04f, TILT_MIN, TILT_MAX);
+  // log no maximo a cada 2 s, e so se o alvo andou: seguir rosto chama isto a cada quadro
+  static uint32_t ultimo_log = 0;
+  static int log_pan = -1, log_tilt = -1;
+  if (millis() - ultimo_log > 2000 && (abs((int)pan_target - log_pan) >= 3 || abs((int)tilt_target - log_tilt) >= 3)) {
+    ultimo_log = millis(); log_pan = (int)pan_target; log_tilt = (int)tilt_target;
+    LOGF("[servo] seguindo rosto: alvo pan %d tilt %d (agora %d/%d)", log_pan, log_tilt, (int)pan_now, (int)tilt_now);
+  }
 }
 
 // ================= audio =================

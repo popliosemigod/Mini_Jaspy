@@ -148,6 +148,35 @@ class Comandos:
             f'- quando ele disser "{c["quando"]}": {c["fazer"]}' for c in self.lista)
 
 
+# Whisper com ruido entra em laco: "um, um, um, ...", "e um robo de mesa que tem um robo de mesa que tem ..."
+# (11/11/2026, varias vezes). Um trecho repetido 3+ vezes seguidas fica uma vez so.
+REPETICAO_RE = re.compile(r"(\b.{1,60}?)(?:[\s,.;!?-]*\1){2,}", re.I | re.S)
+
+
+def corta_repeticao(texto):
+    anterior = None
+    while anterior != texto:
+        anterior, texto = texto, REPETICAO_RE.sub(r"\1", texto)
+    return texto.strip(" ,")
+
+
+def achar_claude():
+    """O executavel do Claude Code: no PATH ou, se nao, o da versao MAIS NOVA da extensao do VS Code.
+    Procura a cada vez: a extensao se atualiza sozinha e apaga a pasta antiga (11/11/2026 o robo
+    morreu com FileNotFoundError porque o caminho guardado era de uma versao ja apagada)."""
+    import glob, shutil
+    achado = shutil.which("claude")
+    if achado:
+        return achado
+    ext = os.path.join(os.path.expanduser("~"), ".vscode", "extensions")
+    candidatos = glob.glob(os.path.join(ext, "anthropic.claude-code-*", "resources", "native-binary", "claude.exe"))
+
+    def versao(p):
+        m = re.search(r"claude-code-(\d+(?:\.\d+)*)", p)
+        return [int(x) for x in m.group(1).split(".")] if m else [0]
+    return max(candidatos, key=versao) if candidatos else "claude"
+
+
 def log(*a):
     print(time.strftime("%H:%M:%S"), *a, flush=True)
 
@@ -433,7 +462,7 @@ class Transcriber:
         text = " ".join(s.text.strip() for s in segs if s.no_speech_prob < 0.6 and s.avg_logprob > -1.0).strip()
         if any(h in text.lower() for h in HALLUCINATIONS):
             return ""
-        return text
+        return corta_repeticao(text)
 
 
 # ------------------------------------------------------------------ cerebro
@@ -443,7 +472,7 @@ class Brain:
         self.proc = None
 
     def _start(self):
-        cmd = ["claude", "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+        cmd = [achar_claude(), "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
                "--tools", "", "--no-session-persistence", "--model", self.model, "--system-prompt", SYSTEM_PROMPT]
         self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                      text=True, encoding="utf-8", cwd=HERE)
@@ -481,7 +510,15 @@ class Brain:
                 except ValueError:
                     continue
                 if j.get("type") == "result":
-                    return parse_reply(j.get("result") or "")
+                    res = j.get("result") or ""
+                    # Limite de uso / erro do Claude: o robo leu em voz alta, em ingles,
+                    # "You've hit your session limit" (11/11/2026). Fala outra coisa.
+                    if j.get("is_error") or (not res.lstrip().startswith("{") and
+                                             re.search(r"session limit|usage limit|rate limit|resets \d", res, re.I)):
+                        log(f"[cerebro] erro do Claude: {res[:120]}")
+                        return {"fala": "Meu cerebro bateu no limite de uso por agora. Daqui a pouco eu volto a "
+                                        "conversar direitinho.", "gesto": "nenhum", "olhar": None}
+                    return parse_reply(res)
         except Exception as e:
             log("[cerebro] erro:", e)
         self.proc = None  # reinicia na proxima
@@ -529,6 +566,7 @@ $s.Dispose()
 # ouvido pelo dono no alto-falante do robo em 11/11/2026 (masculina e suave). Sem internet, Maria.
 VOZ = "en-US-BrianMultilingualNeural"
 VOZ_RITMO = "+0%"
+VOZ_PICO = 0.55  # fracao da escala no pico (o firmware ainda multiplica por SPK_VOLUME)
 _TTS_DIR = os.path.join(tempfile.gettempdir(), f"robo_tts_{os.getpid()}")
 
 
@@ -536,9 +574,15 @@ def _neural(text, wf):
     import miniaudio  # decodifica o MP3 do edge-tts sem ffmpeg
     mp3 = wf[:-4] + ".mp3"
     subprocess.run([sys.executable, "-m", "edge_tts", "--voice", VOZ, f"--rate={VOZ_RITMO}", "--text", text,
-                    "--write-media", mp3], check=True, capture_output=True, timeout=20)
+                    "--write-media", mp3], check=True, capture_output=True, timeout=8)
     d = miniaudio.decode_file(mp3, output_format=miniaudio.SampleFormat.SIGNED16, nchannels=1, sample_rate=RATE)
-    pcm = d.samples.tobytes()
+    # pico em VOZ_PICO da escala: o pico de corrente do amplificador derrubou o 5 V do USB e reiniciou
+    # a placa no inicio de uma fala (11/11/2026)
+    a = np.array(d.samples, dtype=np.float32)
+    pico = float(np.abs(a).max()) if a.size else 0.0
+    if pico > 0:
+        a *= VOZ_PICO * 32767.0 / pico
+    pcm = a.astype(np.int16).tobytes()
     with wave.open(wf, "wb") as w:  # o --falar-no-pc toca o WAV
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE); w.writeframes(pcm)
     return pcm
@@ -582,6 +626,59 @@ def speak(robot, ears, text, volume, on_pc):
         log("[boca] erro ao tocar:", e)
     finally:
         if ears: ears.mute(False)
+
+
+# ------------------------------------------------------------------ camera no PC (pelo USB)
+CAMERA_PORTA = 8092
+CAMERA_HTML = b"""<!doctype html><html><head><meta charset="utf-8"><title>Camera do Jaspy</title>
+<style>body{margin:0;background:#111;color:#ddd;font-family:sans-serif;text-align:center}
+img{max-width:100vw;max-height:92vh;margin-top:8px}</style></head>
+<body><img src="/stream"><div>Camera do Jaspy pelo cabo USB (quadros com o reconhecimento desenhado)</div></body></html>"""
+
+
+def camera_no_pc(robot, porta=CAMERA_PORTA):
+    """Pagina local http://localhost:8092 com o video da camera vindo pelo cabo USB: funciona em qualquer
+    rede (ou sem rede). So pede quadros a placa enquanto a pagina estiver aberta (~3 quadros/s)."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class H(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            if self.path.startswith("/stream"):
+                self.send_response(200)
+                self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=quadro")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                log("[camera-pc] janela da camera aberta")
+                try:
+                    while True:
+                        jpg = robot.capture(4)
+                        if jpg:
+                            self.wfile.write(b"--quadro\r\nContent-Type: image/jpeg\r\nContent-Length: " +
+                                             str(len(jpg)).encode() + b"\r\n\r\n" + jpg + b"\r\n")
+                            self.wfile.flush()
+                            time.sleep(0.02)  # o proximo logo em seguida: o limite e o link USB
+                        else:
+                            time.sleep(1.0)   # camera sem quadro: nao trava a conversa pedindo sem parar
+                except (ConnectionError, OSError):
+                    log("[camera-pc] janela da camera fechada")
+                return
+            body = CAMERA_HTML if self.path in ("/", "/index.html") else b"nao achei"
+            self.send_response(200 if body is CAMERA_HTML else 404)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(body)
+
+    try:
+        srv = ThreadingHTTPServer(("127.0.0.1", porta), H)
+    except OSError as e:
+        log(f"[camera-pc] nao abri a porta {porta}: {e}")
+        return
+    srv.daemon_threads = True
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    log(f"[camera-pc] camera no PC: http://localhost:{porta}/")
 
 
 # ------------------------------------------------------------------ principal
@@ -661,6 +758,10 @@ def main():
     ap.add_argument("--voz", default=VOZ, help="voz neural do edge-tts (ex.: pt-BR-AntonioNeural)")
     ap.add_argument("--voz-ritmo", default=VOZ_RITMO, help="ritmo da voz neural (ex.: -10%%)")
     ap.add_argument("--voz-maria", action="store_true", help="usar so a voz Maria do Windows (sem internet)")
+    ap.add_argument("--servo-vel", default="10,20",
+                    help="velocidade do pescoco em graus/s: 'seguir_rosto,gestos' (padrao 10,20)")
+    ap.add_argument("--wifi", action="store_true",
+                    help="deixar o Wi-Fi da placa ligado (pagina da camera no celular); por padrao fica DESLIGADO")
     args = ap.parse_args()
     VOZ, VOZ_RITMO = ("" if args.voz_maria else args.voz), args.voz_ritmo
 
@@ -668,7 +769,16 @@ def main():
     if args.transporte == "usb":
         try:
             from link_usb import UsbRobot
-            robot = UsbRobot(args.porta, on_log=(lambda t: log("[placa]", t)) if args.logs_placa else None)
+            placa_voltou = threading.Event()
+
+            def on_log_placa(t):
+                # a placa reiniciou sozinha (11/11/2026: queda do 5 V do USB quando o alto-falante comecou
+                # a tocar): ela volta com o Wi-Fi LIGADO; o main desliga de novo
+                if "Pronto! Link USB ativo" in t:
+                    placa_voltou.set()
+                if args.logs_placa:
+                    log("[placa]", t)
+            robot = UsbRobot(args.porta, on_log=on_log_placa)
             st = robot.stats(3)
             if st is None:
                 log(f"Porta {robot.port} aberta, mas a placa nao respondeu. Ela esta com o firmware novo?")
@@ -722,6 +832,18 @@ def main():
     if res:
         anuncios.put(res.get("fala") or f"Estou de volta. {res.get('resumo', '')}")
 
+    if robot is not None and hasattr(robot, "cmd"):
+        # Wi-Fi da placa desligado por padrao: a camera vem pelo cabo (camera_no_pc). Ligado, a rede propria
+        # segurou a RAM interna e a camera parou (maior bloco 2 KB, 0 quadros/s, 11/11/2026); e o radio e
+        # suspeito do chiado do alto-falante (mesmo 5 V).
+        if not args.wifi:
+            robot.cmd("wifi 0")
+            log("[wifi] Wi-Fi da placa desligado (camera pelo USB: http://localhost:%d/; --wifi liga)" % CAMERA_PORTA)
+        vel = [int(float(x)) for x in args.servo_vel.split(",")[:2]]
+        servo_vel = f"servovel {vel[0]} {vel[-1]}"
+        robot.cmd(servo_vel)
+        log(f"[servo] velocidade do pescoco: seguir rosto {vel[0]} graus/s, gestos {vel[-1]} graus/s")
+        camera_no_pc(robot)
     comandos = Comandos()
     if comandos.lista:
         log(f"[comandos] {len(comandos.lista)} ensinados: " + "; ".join(c["quando"] for c in comandos.lista))
@@ -750,10 +872,25 @@ def main():
                 while True:
                     try:
                         pcm, t_end = heard_q.get(timeout=1)
+                        # So o trecho MAIS NOVO: com ruido alto o ouvido enfileira trechos enquanto o robo
+                        # pensa/fala, e responder um por um atrasou a conversa ate 172 s (11/11/2026).
+                        velhos = 0
+                        while not heard_q.empty():
+                            pcm, t_end = heard_q.get_nowait()
+                            velhos += 1
+                        if velhos:
+                            log(f"[ouvidos] {velhos} trecho(s) antigo(s) descartado(s): respondo so ao mais novo")
                         break
                     except queue.Empty:
                         if auto_results and auto_results[-1] is None:
                             raise KeyboardInterrupt
+                        if usb and placa_voltou.is_set():
+                            placa_voltou.clear()
+                            log("[placa] REINICIOU sozinha (queda de energia? confira a alimentacao do USB)")
+                            if not args.wifi:
+                                robot.cmd("wifi 0")
+                                log("[wifi] Wi-Fi da placa desligado de novo")
+                            robot.cmd(servo_vel)
                         # placa desplugada: sai com 3 e o supervisor espera ela voltar
                         if usb and time.time() - ultima_porta > 2:
                             ultima_porta = time.time()

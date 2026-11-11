@@ -37,6 +37,7 @@ class UsbRobot:
         self.mic_q = queue.Queue(maxsize=500)  # ~10 s
         self._mic_wanted = False
         self._jpeg = None; self._jpeg_ev = threading.Event()
+        self._cap_lock = threading.Lock()  # conversa e janela da camera pedem foto: uma de cada vez
         self._faces = None; self._faces_ev = threading.Event()
         self._stats = None; self._stats_ev = threading.Event()
         self.bad_frames = 0
@@ -132,10 +133,11 @@ class UsbRobot:
         return self._stats if self._stats_ev.wait(timeout) else None
 
     def capture(self, timeout=7):
-        self._jpeg_ev.clear(); self.cmd("capture")
-        if not self._jpeg_ev.wait(timeout):
-            return None
-        return self._jpeg or None
+        with self._cap_lock:
+            self._jpeg_ev.clear(); self.cmd("capture")
+            if not self._jpeg_ev.wait(timeout):
+                return None
+            return self._jpeg or None
 
     def wake(self, ms=20000):
         self.cmd(f"wake {int(ms)}")

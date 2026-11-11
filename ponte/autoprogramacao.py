@@ -48,6 +48,21 @@ FERRAMENTAS = ("Read,Edit,Write,Glob,Grep,Bash(pio run:*),Bash(python -m py_comp
                "Bash(git diff:*),Bash(git status:*)")
 
 
+def _achar_claude():
+    """Claude Code no PATH ou o da versao mais nova da extensao do VS Code (ver robo.achar_claude)."""
+    import glob, re
+    achado = shutil.which("claude")
+    if achado:
+        return achado
+    ext = os.path.join(os.path.expanduser("~"), ".vscode", "extensions")
+    cands = glob.glob(os.path.join(ext, "anthropic.claude-code-*", "resources", "native-binary", "claude.exe"))
+
+    def versao(p):
+        m = re.search(r"claude-code-(\d+(?:\.\d+)*)", p)
+        return [int(x) for x in m.group(1).split(".")] if m else [0]
+    return max(cands, key=versao) if cands else "claude"
+
+
 def _git(*args, check=True):
     r = subprocess.run(["git", "-C", RAIZ, *args], capture_output=True, text=True, encoding="utf-8")
     if check and r.returncode != 0:
@@ -121,7 +136,7 @@ class Programador:
             if os.path.exists(FW_BUILD):
                 shutil.copy2(FW_BUILD, FW_BOM)  # o firmware que esta na placa agora: o ultimo bom
             self.log(f"[autoprog] programando ({self.modelo}): {self.pedido}")
-            cmd = ["claude", "-p", f"Pedido do dono: {self.pedido}", "--model", self.modelo,
+            cmd = [_achar_claude(), "-p", f"Pedido do dono: {self.pedido}", "--model", self.modelo,
                    "--permission-mode", "acceptEdits", "--allowedTools", FERRAMENTAS,
                    "--append-system-prompt", REGRAS, "--output-format", "json", "--no-session-persistence"]
             r = subprocess.run(cmd, cwd=RAIZ, capture_output=True, text=True, encoding="utf-8", timeout=1800)

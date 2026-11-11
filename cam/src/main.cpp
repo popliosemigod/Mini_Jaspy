@@ -867,6 +867,8 @@ static void cmd_task(void *) {
       robo_gesture(a);
     } else if (sscanf(c, "servo %d %d", &x, &y) == 2) {
       robo_set_angles(x, y);
+    } else if (sscanf(c, "servovel %d %d", &x, &y) == 2) {
+      robo_set_servo_vel(x, y);
     } else if (sscanf(c, "track %d", &x) == 1) {
       robo_set_tracking(x);
     } else if (sscanf(c, "echo %d", &x) == 1) {

@@ -214,6 +214,7 @@ def main():
     espera = 5
     while True:
         espera_placa()
+        env = prepara_ambiente()  # a cada volta: a extensao do VS Code se atualiza e apaga a pasta antiga
         t0 = time.time()
         codigo = roda(robo, env)
         vida = time.time() - t0
