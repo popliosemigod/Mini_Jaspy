@@ -588,14 +588,20 @@ def _neural(text, wf):
     return pcm
 
 
+_neural_volta = 0.0  # a voz neural falhou: ate esse instante usa a Maria direto (sem esperar o timeout)
+
+
 def synthesize(text, rate=1):
+    global _neural_volta
     os.makedirs(_TTS_DIR, exist_ok=True)
     tf, wf, pf = (os.path.join(_TTS_DIR, n) for n in ("fala.txt", "fala.wav", "tts.ps1"))
-    if VOZ:
+    if VOZ and time.time() >= _neural_volta:
         try:
             return _neural(text, wf), wf
         except Exception as e:
-            log(f"[boca] voz neural indisponivel ({e.__class__.__name__}): usando a Maria")
+            # na rede UVV o servico da voz neural nao respondia e cada fala esperava 8 s (11/11/2026)
+            _neural_volta = time.time() + 300
+            log(f"[boca] voz neural indisponivel ({e.__class__.__name__}): Maria pelos proximos 5 min")
     with open(tf, "w", encoding="utf-8") as f:
         f.write(text)
     with open(pf, "w", encoding="utf-8-sig") as f:
