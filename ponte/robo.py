@@ -4,8 +4,11 @@ Ponte PC <-> robo ESP32-S3.
   ouvidos : microfone INMP441 da placa (porta 82)  -> Whisper (local) -> texto
   olhos   : foto da camera da placa (/capture) + reconhecimento facial (/faces)
   cerebro : Claude Code (`claude -p`, usa a sua conta Claude logada neste PC)
-  boca    : voz Microsoft Maria (Windows) -> alto-falante MAX98357A da placa (porta 83)
+  boca    : voz neural (edge-tts; sem internet, a Maria do Windows) -> alto-falante MAX98357A da placa
   pescoco : servos pan/tilt (/servo, /gesture)
+  nome    : "Jaspy" - o que vem depois do nome e uma ordem direta; tambem tira do silencio
+  silencio: "cala a boca", "fica quieto"... -> mudo de verdade (nem chama o Claude) ate ouvir "Jaspy"
+  comandos ensinados: "Jaspy, a partir de agora, quando eu disser X, faca Y" -> ponte/comandos.json
 
 Uso:
   .venv\\Scripts\\python robo.py                 # conversa por voz
@@ -20,7 +23,7 @@ import numpy as np
 RATE = 16000
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-SYSTEM_PROMPT = """Voce e um pequeno robo de mesa simpatico, curioso e bem-humorado, que conversa em portugues do Brasil.
+SYSTEM_PROMPT = """Voce e o Jaspy, um pequeno robo de mesa simpatico, curioso e bem-humorado, que conversa em portugues do Brasil.
 Seu corpo: uma camera (seus olhos), um microfone (seus ouvidos), um alto-falante (sua boca) e um pescoco com dois servos.
 
 A cada mensagem voce recebe:
@@ -51,11 +54,24 @@ Voce tambem se REPROGRAMA (um Claude Code mexe no seu codigo e no seu firmware):
   coloque "programar": "<o pedido, claro e completo, em portugues>" e diga que vai trabalhar nisso
   (leva alguns minutos; voce continua conversando enquanto isso).
 - Quando a mudanca estiver pronta, voce vai ser avisado aqui. Ai: se a pessoa autorizar ("pode gravar",
-  "sim, grava"), coloque "gravar": true; se recusar, coloque "descartar": true. Nunca grave sem ela autorizar.
+  "sim, grava"), coloque "gravar": true; se recusar ("descarta", "nao grava"), coloque "descartar": true.
+  Nunca grave sem ela autorizar. Comentario solto ("nao ta bom", "legal") NAO e resposta: pergunte de novo.
+
+Seu nome e Jaspy (o reconhecimento de voz pode escrever Jasp, Jasper, Jaspe...):
+- Quando a mensagem avisar que a fala veio pelo nome, o que vem depois e uma ORDEM DIRETA: atenda na hora,
+  curto, usando os campos do JSON quando servirem, e confirme o que fez.
+- Nao diga o seu proprio nome nas respostas (o microfone pode te ouvir e voce se chamaria sozinho).
+
+Voce aprende COMANDOS NOVOS com o seu dono:
+- "a partir de agora, quando eu disser X, faca Y" (ou parecido): coloque "ensinar": {"quando": "X", "fazer": "Y"}
+  e confirme. Os comandos ja ensinados chegam em cada mensagem: quando a pessoa disser um deles, faca o que foi
+  combinado (fala, gesto, olhar...). Se o "fazer" precisar de algo que o seu corpo ainda nao sabe, use "programar".
+- "esquece o comando X": coloque "esquecer_comando": "X".
 
 Responda SEMPRE e SOMENTE com um JSON valido, sem nada antes ou depois:
 {"fala": "...", "gesto": "nenhum", "olhar": null}
-- "aprender", "esquecer", "programar", "gravar", "descartar": opcionais, so quando for o caso (veja acima).
+- "aprender", "esquecer", "programar", "gravar", "descartar", "ensinar", "esquecer_comando": opcionais, so
+  quando for o caso (veja acima).
 - "fala": o que voce vai dizer em voz alta. Curto e natural (1 a 3 frases), sem emojis, sem markdown, sem listas.
 - "gesto": um de "sim" (acenar com a cabeca), "nao" (balancar a cabeca), "curioso" (inclinar a cabeca), "centro" (olhar para frente) ou "nenhum".
 - "olhar": null, ou {"pan": 20-160, "tilt": 50-130} para virar o pescoco para uma direcao (pan 90/tilt 90 = frente; pan maior = esquerda; tilt maior = baixo).
@@ -65,6 +81,71 @@ Responda SEMPRE e SOMENTE com um JSON valido, sem nada antes ou depois:
 # frases que o Whisper costuma "inventar" em silencio/ruido
 HALLUCINATIONS = ["amara.org", "legendas pela comunidade", "obrigado por assistir", "inscreva-se",
                   "legenda adriana", "sous-titres", "subtitles by"]
+
+# ---- nome: o Whisper escreve "Jaspy" de varios jeitos (Jasp, Jaspi, Jasper, Jaspe, Djaspy...)
+NOME_RE = re.compile(r"\b(?:d?j|y)[aáeé]s[pb](?:er|[eiy])?\b[\s,.:;!?-]*", re.I)
+NOME_ESPERA = 12  # s: depois de "Jaspy" sozinho, a proxima frase e a ordem
+
+
+def achar_nome(texto):
+    """(True, ordem) se a fala chama o robo pelo nome; a ordem e o que vem depois do nome."""
+    m = NOME_RE.search(texto)
+    if not m:
+        return False, ""
+    return True, texto[m.end():].strip(" ,.;:!?-")
+
+
+# ---- silencio oficial: decidido aqui, sem o Claude (garantido e de graca)
+SILENCIO_RE = re.compile(
+    r"\b(cal[ae]\s+(?:a\s+)?boca|calad[oa]|cala\s*-?\s*te|fica(?:r)?\s+(?:quiet|calad|mud)[oa]|"
+    r"fique\s+(?:quiet|calad|mud)[oa]|sil[eê]ncio|psi+u|sh+|(?:para|pare|chega)\s+de\s+falar|"
+    r"n[aã]o\s+fal[ae]\s+mais|boca\s+fechada|modo\s+sil[eê]ncio|desliga\s+a\s+voz|quiet[oa]\s+a[ií])\b", re.I)
+
+# ---- confirmacao da autoprogramacao: so com palavra explicita (um "nao ta bom" solto ja descartou mudanca)
+GRAVAR_RE = re.compile(r"\b(pode\s+gravar|grav[ae]|pode\s+salvar|salv[ae]|confirm[oa]|autoriz[oa]|pode\s+sim)\b", re.I)
+DESCARTAR_RE = re.compile(r"\b(descart[ae]|n[aã]o\s+grav[ae]|cancel[ae]|desfaz|desfa[cç]a|joga\s+fora|n[aã]o\s+quero)\b", re.I)
+
+# ---- comandos ensinados pelo dono (arquivo local, fora do git)
+COMANDOS = os.path.join(HERE, "comandos.json")
+
+
+class Comandos:
+    def __init__(self, arquivo=COMANDOS):
+        self.arquivo = arquivo
+        try:
+            with open(arquivo, encoding="utf-8") as f:
+                self.lista = [c for c in json.load(f) if c.get("quando") and c.get("fazer")]
+        except (OSError, ValueError):
+            self.lista = []
+
+    def _grava(self):
+        tmp = self.arquivo + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(self.lista, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, self.arquivo)
+
+    def ensina(self, quando, fazer):
+        quando, fazer = str(quando).strip()[:120], str(fazer).strip()[:300]
+        if not quando or not fazer:
+            return False
+        self.lista = [c for c in self.lista if c["quando"].lower() != quando.lower()] + \
+                     [{"quando": quando, "fazer": fazer, "desde": time.strftime("%d/%m/%Y %H:%M")}]
+        self._grava()
+        return True
+
+    def esquece(self, quando):
+        antes = len(self.lista)
+        q = str(quando).strip().lower()
+        self.lista = [c for c in self.lista if q not in c["quando"].lower()]
+        if len(self.lista) != antes:
+            self._grava()
+        return antes - len(self.lista)
+
+    def contexto(self):
+        if not self.lista:
+            return ""
+        return "Comandos que o seu dono te ensinou (cumpra quando ele disser):\n" + "\n".join(
+            f'- quando ele disser "{c["quando"]}": {c["fazer"]}' for c in self.lista)
 
 
 def log(*a):
@@ -348,7 +429,7 @@ class Transcriber:
         # temperatura fixa (sem re-decodificar) + sem timestamps + contexto generico: ~5 s no i5-1235U
         segs, _ = self.model.transcribe(a, language="pt", beam_size=1, vad_filter=False, temperature=0.0,
                                         without_timestamps=True, condition_on_previous_text=False,
-                                        initial_prompt="Conversa informal em português do Brasil com um robô de mesa.")
+                                        initial_prompt="Conversa informal em português do Brasil com um robô de mesa chamado Jaspy.")
         text = " ".join(s.text.strip() for s in segs if s.no_speech_prob < 0.6 and s.avg_logprob > -1.0).strip()
         if any(h in text.lower() for h in HALLUCINATIONS):
             return ""
@@ -444,9 +525,33 @@ $s.Dispose()
 """
 
 
+# Voz neural (edge-tts, a mesma do Jaspy do laboratorio): bem mais suave que a Maria. Escolhida de
+# ouvido pelo dono no alto-falante do robo em 11/11/2026 (masculina e suave). Sem internet, Maria.
+VOZ = "en-US-BrianMultilingualNeural"
+VOZ_RITMO = "+0%"
+_TTS_DIR = os.path.join(tempfile.gettempdir(), f"robo_tts_{os.getpid()}")
+
+
+def _neural(text, wf):
+    import miniaudio  # decodifica o MP3 do edge-tts sem ffmpeg
+    mp3 = wf[:-4] + ".mp3"
+    subprocess.run([sys.executable, "-m", "edge_tts", "--voice", VOZ, f"--rate={VOZ_RITMO}", "--text", text,
+                    "--write-media", mp3], check=True, capture_output=True, timeout=20)
+    d = miniaudio.decode_file(mp3, output_format=miniaudio.SampleFormat.SIGNED16, nchannels=1, sample_rate=RATE)
+    pcm = d.samples.tobytes()
+    with wave.open(wf, "wb") as w:  # o --falar-no-pc toca o WAV
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE); w.writeframes(pcm)
+    return pcm
+
+
 def synthesize(text, rate=1):
-    d = tempfile.mkdtemp(prefix="robo_tts_")
-    tf, wf, pf = (os.path.join(d, n) for n in ("fala.txt", "fala.wav", "tts.ps1"))
+    os.makedirs(_TTS_DIR, exist_ok=True)
+    tf, wf, pf = (os.path.join(_TTS_DIR, n) for n in ("fala.txt", "fala.wav", "tts.ps1"))
+    if VOZ:
+        try:
+            return _neural(text, wf), wf
+        except Exception as e:
+            log(f"[boca] voz neural indisponivel ({e.__class__.__name__}): usando a Maria")
     with open(tf, "w", encoding="utf-8") as f:
         f.write(text)
     with open(pf, "w", encoding="utf-8-sig") as f:
@@ -534,6 +639,7 @@ def high_priority():
 
 
 def main():
+    global VOZ, VOZ_RITMO
     high_priority()
     ap = argparse.ArgumentParser(description="Robo ESP32-S3 com o Claude como cerebro")
     ap.add_argument("--transporte", default="usb", choices=["usb", "wifi"],
@@ -552,7 +658,11 @@ def main():
     ap.add_argument("--autoteste", help="frases separadas por | que o robo toca para si mesmo e responde")
     ap.add_argument("--modelo-programador", default="opus",
                     help="modelo do Claude Code que reprograma o robo (autoprogramacao)")
+    ap.add_argument("--voz", default=VOZ, help="voz neural do edge-tts (ex.: pt-BR-AntonioNeural)")
+    ap.add_argument("--voz-ritmo", default=VOZ_RITMO, help="ritmo da voz neural (ex.: -10%%)")
+    ap.add_argument("--voz-maria", action="store_true", help="usar so a voz Maria do Windows (sem internet)")
     args = ap.parse_args()
+    VOZ, VOZ_RITMO = ("" if args.voz_maria else args.voz), args.voz_ritmo
 
     robot = None
     if args.transporte == "usb":
@@ -612,6 +722,15 @@ def main():
     if res:
         anuncios.put(res.get("fala") or f"Estou de volta. {res.get('resumo', '')}")
 
+    comandos = Comandos()
+    if comandos.lista:
+        log(f"[comandos] {len(comandos.lista)} ensinados: " + "; ".join(c["quando"] for c in comandos.lista))
+    mudo = False       # silencio oficial: so o nome tira
+    nome_ate = 0.0     # chamado so pelo nome: a proxima frase ate esse instante e a ordem
+    from link_usb import find_port
+    usb = args.transporte == "usb"
+    ultima_porta = time.time()
+
     idle_ev = threading.Event(); idle_ev.set()
     auto_results = []
     if args.autoteste and robot and not args.texto:
@@ -635,7 +754,13 @@ def main():
                     except queue.Empty:
                         if auto_results and auto_results[-1] is None:
                             raise KeyboardInterrupt
-                        if not anuncios.empty():
+                        # placa desplugada: sai com 3 e o supervisor espera ela voltar
+                        if usb and time.time() - ultima_porta > 2:
+                            ultima_porta = time.time()
+                            if find_port() is None:
+                                log("[usb] placa desconectada do USB")
+                                sys.exit(3)
+                        if not anuncios.empty() and not mudo:
                             texto = anuncios.get()
                             log(f"[anuncio] {texto}")
                             idle_ev.clear()
@@ -659,12 +784,49 @@ def main():
         if not heard:
             idle_ev.set()
             continue
+
+        # ---- nome e silencio: decididos aqui, antes do Claude
+        chamou, ordem = achar_nome(heard)
+        if mudo:
+            if not chamou:
+                log(f"[silencio] ignorado: \"{heard}\"")
+                idle_ev.set()
+                continue
+            mudo = False
+            log("[silencio] chamado pelo nome: voltei a falar")
+            if not ordem:
+                if robot: robot.gesture("sim")
+                speak(robot, ears, "Voltei! Pode falar.", args.volume, on_pc)
+                idle_ev.set()
+                continue
+        if SILENCIO_RE.search(heard) and not GRAVAR_RE.search(heard):
+            mudo = True
+            log(f"[silencio] fiquei mudo (\"{heard}\"); so volto quando ouvir o meu nome")
+            if robot: robot.gesture("sim")  # aceno: entendeu, sem dizer nada
+            idle_ev.set()
+            continue
+        nota_nome = ""
+        if chamou and not ordem:
+            log("[nome] chamado sem ordem: esperando a proxima frase")
+            if robot: robot.gesture("curioso")
+            speak(robot, ears, "Pode falar.", args.volume, on_pc)
+            nome_ate = time.time() + NOME_ESPERA
+            idle_ev.set()
+            continue
+        if chamou or t_end < nome_ate:
+            ordem = ordem if chamou else heard
+            nome_ate = 0.0
+            log(f"[nome] ordem: \"{ordem}\"")
+            nota_nome = (f'Esta fala veio pelo seu nome (Jaspy): o que vem depois dele e uma ORDEM direta: '
+                         f'"{ordem}". Atenda e confirme curto.')
+
         if th is None:
             seen = {"jpeg": robot.capture() if robot else None, "faces": robot.status() if robot else None}
         else:
             th.join(10)
         t_stt = time.time()
-        r = brain.ask(heard, seen.get("jpeg"), seen.get("faces"), prog.contexto())
+        extra = "\n".join(x for x in (prog.contexto(), comandos.contexto(), nota_nome) if x)
+        r = brain.ask(heard, seen.get("jpeg"), seen.get("faces"), extra)
         t_brain = time.time()
         log(f"[cerebro] ({t_brain - t_stt:.1f}s) {json.dumps(r, ensure_ascii=False)}")
         if robot:
@@ -672,10 +834,22 @@ def main():
         sair_com = None
         if isinstance(r.get("programar"), str) and r["programar"].strip():
             prog.comeca(r["programar"])
+        # gravar/descartar so com palavra explicita na fala (o Claude sozinho ja descartou por engano)
         if r.get("gravar") is True:
-            sair_com = prog.gravar()  # o supervisor grava e volta o robo
+            if GRAVAR_RE.search(heard):
+                sair_com = prog.gravar()  # o supervisor grava e volta o robo
+            else:
+                log(f"[autoprog] 'gravar' ignorado: a fala nao tinha confirmacao explicita (\"{heard}\")")
         elif r.get("descartar") is True:
-            prog.descartar()
+            if DESCARTAR_RE.search(heard):
+                prog.descartar()
+            else:
+                log(f"[autoprog] 'descartar' ignorado: a fala nao tinha recusa explicita (\"{heard}\")")
+        ens = r.get("ensinar")
+        if isinstance(ens, dict) and comandos.ensina(ens.get("quando", ""), ens.get("fazer", "")):
+            log(f"[comandos] aprendi: quando \"{ens['quando']}\" -> {ens['fazer']}")
+        if isinstance(r.get("esquecer_comando"), str) and r["esquecer_comando"].strip():
+            log(f"[comandos] esqueci {comandos.esquece(r['esquecer_comando'])}: {r['esquecer_comando']}")
         log(f"[tempo] fim da fala -> inicio da resposta: {time.time() - t_end:.1f}s "
             f"(ouvir+foto {t_stt - t_end:.1f}s, pensar {t_brain - t_stt:.1f}s)")
         if auto_results and auto_results[-1] is not None:

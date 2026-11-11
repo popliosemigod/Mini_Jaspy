@@ -45,16 +45,20 @@ Idioma do usuário: português do Brasil. O robô fala pt-BR, em **volume baixo,
 | Autoteste acústico (alto-falante → mic) | ✅ Tom de 1 kHz detectado 37,7× acima do resto |
 | Conversa completa (voz → Whisper → Claude → voz) | ✅ Autoteste: 5–6 de 6 frases entendidas, resposta em **~8–12 s** |
 | Câmera dorme/acorda sob demanda | ✅ Acorda em 0,75 s; foto em 1,6 s se dormindo, 0,27 s se acordada |
-| Reconhecimento facial | ✅ (testado ontem: dono 61–68% ao vivo) |
-| Imagem da câmera | ⚠️ **Escura** nos testes de hoje: lente tampada ou virada para algo escuro (não é software) |
-| Servos | ❌ **Não ligados** (usuário pediu teste sem servos). Código pronto, não validado |
-| Wi-Fi | ⚠️ Funciona, mas a rede **Wifi_2Solve** é ruim para a ESP32 (§7.2). Não é mais necessário para o robô |
-| **Wi-Fi próprio da placa** (rede aberta "Robo-ESP32") | 🟡 Código pronto e compilado, **não gravado nem testado** (§6.4) |
+| Reconhecimento facial | ✅ 11/11: dono 0,57–0,79 ao vivo, com o **quadro girado** (§13.2) |
+| Rostos aprendidos pela câmera | 🟡 Gravado; comandos e prazo testados, **falta testar com uma pessoa nova** (§13.1) |
+| Imagem da câmera | ✅ Clara. A câmera está **de lado** (~90°): o detector gira o quadro sozinho (§13.2) |
+| Servos | 🟡 A placa comanda (pan 50→129, tilt 65→114 medidos na placa, 20°/s); **o dono não confirmou ter visto mexer** — conferir 5 V externo e GND comum |
+| Wi-Fi | ✅ 11/11 entrou na rede `Jaspy` (−24 a −44 dBm). Não é necessário para o robô |
+| **Wi-Fi próprio da placa** (rede aberta "Robo-ESP32") | 🟡 **Gravado** em 11/11, ainda não testado longe das redes conhecidas (§6.4) |
+| Autoprogramação por voz | ✅ Rodou 2× de verdade (91 s e 125 s, só Python); fluxo de gravar com supervisor pronto (§13.4) |
+| Voz | 🟡 Neural (Brian); **chiado** em investigação (§13.6) |
 | Build sem fotos / sem senhas (repo público) | ✅ Compila nos dois casos (imagens cinza / `wifi_redes_exemplo.h`) |
 | Disparos falsos do detector de voz | ⚠️ Pendência principal (§9.1) |
 
-**O que está gravado na placa hoje:** o firmware **anterior** ao Wi-Fi próprio, com Wi-Fi só nas
-redes conhecidas e senhas no código. Tudo o mais desta lista já está nele.
+**O que está gravado na placa hoje (11/11/2026):** o firmware do branch `autoprogramacao` (commit
+`898273c`): Wi-Fi próprio, rostos aprendidos, quadro girado, pescoço lento, LittleFS montado só na hora.
+Backup da flash anterior (16 MB, com as fotos) em `backup_placa/` — fora do git.
 
 **Placa atual:** a placa conectada **não é a mesma de ontem** (mesmo modelo). A de hoje tem MAC
 `c4:9e:7e:00:48:d8` e apareceu na **COM22** neste PC; a anterior tinha `…47:40` na COM21.
@@ -381,6 +385,61 @@ A placa já está gravada com um firmware que **funciona para conversar**, mas *
 (§6.4): grave de novo para tê-lo. A porta COM vai ser outra na máquina nova: o `robo.py` acha a placa sozinho (pelo CH343), e o `platformio.ini` está sem
 porta fixa (detecção automática). A primeira compilação na máquina nova baixa o toolchain ESP32
 (~1 GB) e leva alguns minutos.
+
+## 13. O que mudou em 11/11/2026 (máquina do laboratório Jaspy, `C:\Mini_Jaspy`)
+
+Branch local `autoprogramacao` (não publicado). Firmware compilado com o PlatformIO **isolado** em
+`C:\pio-mini` (`ponte/maquina.json`): o Arduino 2.0.17 deste projeto tem o mesmo nome de pacote do
+Arduino 3.x de outros projetos da máquina e o sobrescreveria.
+
+### 13.1 Rostos aprendidos pela câmera
+Quem aparece como "Creatura" diz o nome ("meu nome é Ana") → o cérebro manda `"aprender": "Ana"` →
+a placa tira **5 amostras** (só com **um** rosto no quadro, largura ≥ 50 px, prazo 30 s). Depois, a cada
+30 s em que reconhece a pessoa com certeza média (0,60–0,80), junta mais uma (até 15 por pessoa): aprende
+aos poucos. Amostras (vetor de 512 números) na **PSRAM** e em `/rostos.bin` (LittleFS na partição spiffs,
+sobrevive a desligar e a regravar). Comandos USB: `aprender <nome>`, `esquecer <nome>`, `pessoas`.
+**Lição:** com o LittleFS montado o tempo todo, o maior bloco de RAM interna caiu de 35,8 para 30,7 KB e a
+câmera não acordava mais (`esp_camera_init 0xffffffff`). Agora monta, lê/grava e desmonta (34,8 KB).
+
+### 13.2 Quadro girado
+O detector só acha rosto **em pé**, e a câmera está **de lado** (~90°): nada era achado. Sem rosto por
+3 quadros, o próximo é girado 90° para um lado, depois para o outro; achou, fica nele. O pescoço segue no
+quadro da câmera (ponto desgirado). Medido: "rosto achado com o quadro girado anti-horário", dono
+0,57–0,79. Se a câmera for montada em pé, nada muda (o modo normal é tentado primeiro).
+
+### 13.3 Pescoço, hora
+Pescoço: 20°/s seguindo o rosto e 45°/s nos gestos (eram 125 e 300), freando ao chegar; passos dos gestos
+de 800 ms. O cérebro recebe a data **e a hora**. `stats` traz `pan`, `tilt` e `ram_maior_bloco` ao vivo.
+
+### 13.4 Autoprogramação por voz
+"Jaspy, aprende a…" → `"programar": "<pedido>"` → `ponte/autoprogramacao.py` abre uma sessão do Claude Code
+(Opus) que **só lê, edita e compila** (nada de gravar a placa, pinagem, senhas ou fotos) → o robô confere
+(recompila / py_compile) e pergunta "Posso gravar em mim?". Só grava com **palavra explícita**
+("pode gravar"; um "não tá bom" solto já descartou uma mudança por engano) → `supervisor.py` grava, espera
+a placa responder e, se não voltar, regrava `backup_placa/firmware_bom.bin` e desfaz o commit. Cada mudança
+aceita vira o commit `auto: <pedido>`.
+
+### 13.5 Nome, silêncio e comandos ensinados (decididos no `robo.py`, sem o Claude)
+- **"Jaspy, …"**: o que vem depois do nome é ordem direta; só "Jaspy" → "Pode falar" e espera 12 s.
+- **Silêncio oficial**: "cala a boca", "fica quieto", "silêncio", "para de falar", "psiu"… → acena e fica
+  **mudo de verdade** (nem chama o Claude, anúncios esperam) até ouvir **"Jaspy"**.
+- **Comandos ensinados**: "Jaspy, a partir de agora, quando eu disser X, faça Y" → `ponte/comandos.json`
+  (local, fora do git), lembrado a cada mensagem; "esquece o comando X" apaga.
+
+### 13.6 Voz e chiado (em aberto)
+Voz neural do edge-tts (`en-US-BrianMultilingualNeural`, escolhida de ouvido; `--voz` troca; sem internet
+volta para a Maria). O dono ouve **chiado** com qualquer voz → está no caminho do som, não na voz. Teste de
+11/11 pelo USB (Wi-Fi ligado/desligado × volume normal/dobrado) **sem resposta ainda**: se o Wi-Fi desligado
+limpar, o rádio puxa corrente do 5 V do MAX98357A (separar a alimentação ou desligar o Wi-Fi ao falar); se
+o volume dobrado limpar, subir `SPK_VOLUME` (hoje 0,25).
+
+### 13.7 Funcionar sozinho, com log de tudo
+`ponte/supervisor.py`: espera a placa ser plugada, religa o robô se cair (5→60 s), trata desplugar
+(`robo.py` sai com 3), grava as mudanças da autoprogramação, acha o Claude Code na extensão do VS Code e
+**grava tudo** em `ponte/logs/robo_AAAA-MM-DD.log` (30 dias). Uma instância só.
+- Com janela: `rodar_robo.bat` (local) ou `ponte\.venv\Scripts\python ponte\supervisor.py --logs-placa`.
+- **Início automático** a cada login (escondido): `ponte\.venv\Scripts\python ferramentas\inicio_automatico.py`
+  (`--tirar` desliga). Tem de ser rodado pelo dono (cria atalho na pasta Inicializar).
 
 ## 12. Cadastro facial com outras fotos
 

@@ -15,6 +15,11 @@ historico/*.zip
 # Copia da flash da placa (tem as fotos de rosto dentro) e o firmware "ultimo bom" da autoprogramacao
 backup_placa/
 
+# Desta maquina / desta pessoa: logs das conversas, comandos ensinados ao robo, configuracao local
+ponte/logs/
+ponte/comandos.json
+ponte/maquina.json
+
 # Gravacoes de audio dos testes
 ponte/testes/gravacoes/
 ponte/gravacoes/

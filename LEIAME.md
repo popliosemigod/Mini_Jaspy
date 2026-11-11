@@ -30,14 +30,32 @@ Se o pescoço seguir o rosto para o lado errado, troque `PAN_DIR`/`TILT_DIR` em 
 
 O robô conversa com o PC **pelo cabo USB**: não precisa de hotspot nem de Wi-Fi.
 
-1. Deixe a placa ligada ao PC pelo USB.
-2. Na pasta `ponte`:
+**Sozinho, sempre que plugar** (recomendado): rode uma vez
 
 ```
-.venv\Scripts\python robo.py
+ponte\.venv\Scripts\python ferramentas\inicio_automatico.py
 ```
 
-3. Espere "Pronto! Pode falar" e fale normalmente. A resposta vem em ~8–12 s.
+Daí em diante, a cada login do Windows o robô sobe escondido e espera a placa ser plugada; desplugou,
+espera de novo; travou, religa. Tudo fica registrado em `ponte\logs\robo_AAAA-MM-DD.log`.
+(`--tirar` desliga o início automático.)
+
+**Na mão, vendo o log na tela:**
+
+```
+ponte\.venv\Scripts\python ponte\supervisor.py --logs-placa
+```
+
+Espere "Pronto! Pode falar" e fale normalmente. A resposta vem em ~4–9 s.
+
+### Falando com ele
+
+- **"Jaspy, …"**: o que vem depois do nome é uma ordem direta.
+- **"Cala a boca"**, "fica quieto", "silêncio": ele acena e fica mudo até você chamar **"Jaspy"**.
+- **"Jaspy, a partir de agora, quando eu disser X, faça Y"**: ele decora e repete sempre que ouvir X.
+- **"Meu nome é Ana"** (com a Ana sozinha de frente para a câmera): ele aprende o rosto pela câmera.
+- **"Jaspy, aprende a…"**: ele se reprograma (Claude Code), conta o que mudou e só grava depois de você
+  dizer **"pode gravar"**.
 
 Opções: `--texto` (digitar em vez de falar), `--modelo sonnet` (mais esperto, mais lento),
 `--whisper base` (mais rápido, entende menos), `--logs-placa`, `--autoteste "frase 1|frase 2"`.
