@@ -2,6 +2,9 @@
 #include "link.h"
 #include <WiFi.h>
 #include "driver/i2s.h"
+#include "driver/gpio.h"
+#include "soc/gpio_periph.h"
+#include "soc/io_mux_reg.h"
 #include "freertos/stream_buffer.h"
 #include "lwip/sockets.h"
 #include <fcntl.h>
@@ -338,6 +341,24 @@ static void spk_play_task(void *) {
     mic_mute_until = millis() + 300;
     LOGF("[spk] fim");
   }
+}
+
+// Diagnostico dos servos (comando "servodiag"): le o PROPRIO pino do servo por 40 ms e mede a fracao
+// do tempo em nivel alto. 90 graus = 1,5 ms a cada 20 ms = ~7,5%. Ligar so o buffer de ENTRADA do pino
+// (PIN_INPUT_ENABLE) nao mexe na rota de saida: o PWM continua indo para o servo enquanto se mede.
+// 0% = o sinal nao sai (software); ~7,5% = o sinal sai e o problema e ligacao/alimentacao (11/11/2026).
+static void diag_pino(int pino, int canal, float graus) {
+  PIN_INPUT_ENABLE(GPIO_PIN_MUX_REG[pino]);
+  uint32_t alto = 0, total = 0, t0 = micros();
+  while (micros() - t0 < 40000) { total++; if (gpio_get_level((gpio_num_t)pino)) alto++; }
+  float esperado = (500.0f + graus * 2000.0f / 180.0f) / 20000.0f * 100.0f;
+  LOGF("[servo] diag GPIO%d: nivel alto %.1f%% (esperado %.1f%% para %.0f graus) | ledc canal %d duty %u freq %u Hz",
+       pino, total ? 100.0f * alto / total : 0.0f, esperado, graus, canal, ledcRead(canal), ledcReadFreq(canal));
+}
+
+void robo_servo_diag() {
+  diag_pino(SERVO_PAN_PIN, SERVO_CH_PAN, pan_now);
+  diag_pino(SERVO_TILT_PIN, SERVO_CH_TILT, tilt_now);
 }
 
 void robo_begin() {
