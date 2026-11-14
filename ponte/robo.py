@@ -68,9 +68,15 @@ Voce aprende COMANDOS NOVOS com o seu dono:
   combinado (fala, gesto, olhar...). Se o "fazer" precisar de algo que o seu corpo ainda nao sabe, use "programar".
 - "esquece o comando X": coloque "esquecer_comando": "X".
 
+Voce TOCA MUSICA pelo seu alto-falante (arquivos de audio guardados no computador):
+- Se pedirem uma musica ("toca November Rain do Guns N' Roses"), coloque "musica": "<nome da musica e artista>"
+  e diga algo curto antes ("Vou colocar November Rain!"). Se a mensagem trouxer a lista das suas musicas,
+  escolha dela o nome mais parecido. Se nao tiver nenhuma parecida, diga que nao tem essa musica.
+- Para parar a musica, coloque "musica": "parar". Enquanto a musica toca, voce so ouve quem te chama pelo nome.
+
 Responda SEMPRE e SOMENTE com um JSON valido, sem nada antes ou depois:
 {"fala": "...", "gesto": "nenhum", "olhar": null}
-- "aprender", "esquecer", "programar", "gravar", "descartar", "ensinar", "esquecer_comando": opcionais, so
+- "aprender", "esquecer", "programar", "gravar", "descartar", "ensinar", "esquecer_comando", "musica": opcionais, so
   quando for o caso (veja acima).
 - "fala": o que voce vai dizer em voz alta. Curto e natural (1 a 3 frases), sem emojis, sem markdown, sem listas.
 - "gesto": um de "sim" (acenar com a cabeca), "nao" (balancar a cabeca), "curioso" (inclinar a cabeca), "centro" (olhar para frente) ou "nenhum".
@@ -104,6 +110,15 @@ SILENCIO_RE = re.compile(
 # ---- confirmacao da autoprogramacao: so com palavra explicita (um "nao ta bom" solto ja descartou mudanca)
 GRAVAR_RE = re.compile(r"\b(pode\s+gravar|grav[ae]|pode\s+salvar|salv[ae]|confirm[oa]|autoriz[oa]|pode\s+sim)\b", re.I)
 DESCARTAR_RE = re.compile(r"\b(descart[ae]|n[aã]o\s+grav[ae]|cancel[ae]|desfaz|desfa[cç]a|joga\s+fora|n[aã]o\s+quero)\b", re.I)
+
+# ---- musica: parar e volume decididos aqui, sem o Claude (funciona mesmo com a musica alta)
+PARAR_MUSICA_RE = re.compile(
+    r"\b(?:para|pare|parar|desliga|desligue|tira|chega|corta)\b[\w\s,]{0,20}?\b(?:m[uú]sica|som|de\s+tocar|de\s+cantar)\b",
+    re.I)
+ABAIXA_MUSICA_RE = re.compile(r"\b(?:abaix[ae]|diminu[ia]|baix[ae])\b.{0,25}?\b(?:m[uú]sica|som|volume)\b", re.I)
+AUMENTA_MUSICA_RE = re.compile(r"\b(?:aument[ae]|sob[ea]|mais\s+alto)\b.{0,25}?\b(?:m[uú]sica|som|volume)\b", re.I)
+MUSICA_RE = re.compile(r"m[uú]sica|can[cç][aã]o|\btoca|\btocar|\bcant[ae]|\bsom\b|playlist", re.I)
+MUSICA = None  # o tocador (musica.Musica); speak() pausa a musica enquanto o robo fala
 
 # ---- comandos ensinados pelo dono (arquivo local, fora do git)
 COMANDOS = os.path.join(HERE, "comandos.json")
@@ -620,6 +635,7 @@ def speak(robot, ears, text, volume, on_pc):
     a = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) * volume
     pcm = np.clip(a, -32768, 32767).astype(np.int16).tobytes()
     dur = len(pcm) / 2 / RATE
+    pausou = MUSICA.pausa() if MUSICA is not None else False  # a fala usa o mesmo alto-falante
     if ears: ears.mute(True)
     try:
         if on_pc or robot is None:
@@ -632,6 +648,7 @@ def speak(robot, ears, text, volume, on_pc):
         log("[boca] erro ao tocar:", e)
     finally:
         if ears: ears.mute(False)
+        if pausou: MUSICA.retoma()
 
 
 # ------------------------------------------------------------------ camera no PC (pelo USB)
@@ -742,7 +759,7 @@ def high_priority():
 
 
 def main():
-    global VOZ, VOZ_RITMO
+    global VOZ, VOZ_RITMO, MUSICA
     high_priority()
     ap = argparse.ArgumentParser(description="Robo ESP32-S3 com o Claude como cerebro")
     ap.add_argument("--transporte", default="usb", choices=["usb", "wifi"],
@@ -770,6 +787,9 @@ def main():
                     help="velocidade do pescoco em graus/s: 'seguir_rosto,gestos' (padrao 10,20)")
     ap.add_argument("--wifi", action="store_true",
                     help="deixar o Wi-Fi da placa ligado (pagina da camera no celular); por padrao fica DESLIGADO")
+    ap.add_argument("--volume-musica", type=float, default=0.35,
+                    help="volume da musica, 0.05 a 0.7 da escala (padrao 0.35: bem abaixo da voz)")
+    ap.add_argument("--musica-no-pc", action="store_true", help="tocar as musicas no alto-falante do PC")
     args = ap.parse_args()
     VOZ, VOZ_RITMO = ("" if args.voz_maria else args.voz), args.voz_ritmo
 
@@ -825,12 +845,19 @@ def main():
     stt = None
     if not args.texto:
         stt = Transcriber(args.whisper)
-        ears = Ears(robot, heard_q, args.nivel, on_speech_start=lambda: robot.wake(20000))
+        # com musica tocando o mic ouve a musica o tempo todo: nao acorda a camera a toa
+        ears = Ears(robot, heard_q, args.nivel,
+                    on_speech_start=lambda: None if (MUSICA and MUSICA.tocando) else robot.wake(20000))
         ears.start()
 
     brain = Brain(args.modelo)
     brain._start()
     on_pc = args.falar_no_pc or robot is None
+
+    import musica as musica_mod
+    MUSICA = musica_mod.Musica(robot, on_pc or args.musica_no_pc, args.volume_musica, log=log)
+    log(f"[musica] {len(musica_mod.listar())} musica(s) em: " + ("; ".join(musica_mod.pastas()) or
+        "nenhuma pasta (crie ponte/musicas/ ou ponha \"MUSICAS\" no ponte/maquina.json)"))
 
     # autoprogramacao: o que o robo tem a dizer sozinho (fim da programacao) entra nesta fila
     from autoprogramacao import Programador, ler_resultado
@@ -902,6 +929,8 @@ def main():
                                 log("[wifi] Wi-Fi da placa desligado de novo")
                             robot.cmd(servo_vel)
                             robot.cmd(f"volume {args.volume_placa}")
+                            if MUSICA.tocando and MUSICA.na_placa:
+                                robot.cmd("echo 1")  # a placa volta com o eco desligado
                         # placa desplugada: sai com 3 e o supervisor espera ela voltar
                         if usb and time.time() - ultima_porta > 2:
                             ultima_porta = time.time()
@@ -915,10 +944,12 @@ def main():
                             speak(robot, ears, texto, args.volume, on_pc)
                             idle_ev.set()
                 idle_ev.clear()
-                # foto e rostos em paralelo com a transcricao (a camera ja acordou quando a voz comecou)
-                th = threading.Thread(target=lambda: seen.update(
-                    jpeg=robot.capture() if robot else None, faces=robot.status() if robot else None))
-                th.start()
+                # foto e rostos em paralelo com a transcricao (a camera ja acordou quando a voz comecou);
+                # com musica, quase tudo que chega e a propria musica: a foto so vem se a fala passar adiante
+                if not MUSICA.tocando:
+                    th = threading.Thread(target=lambda: seen.update(
+                        jpeg=robot.capture() if robot else None, faces=robot.status() if robot else None))
+                    th.start()
                 if args.salvar_audio:
                     os.makedirs(os.path.join(HERE, "gravacoes"), exist_ok=True)
                     with wave.open(os.path.join(HERE, "gravacoes", time.strftime("%H%M%S") + ".wav"), "wb") as w:
@@ -935,6 +966,27 @@ def main():
 
         # ---- nome e silencio: decididos aqui, antes do Claude
         chamou, ordem = achar_nome(heard)
+
+        # ---- musica tocando: parar/volume aqui mesmo; o resto so passa se vier pelo nome
+        if MUSICA.tocando:
+            if PARAR_MUSICA_RE.search(heard):
+                MUSICA.parar()
+                if robot: robot.gesture("sim")
+                if not mudo:
+                    speak(robot, ears, "Pronto, parei a musica.", args.volume, on_pc)
+                idle_ev.set()
+                continue
+            if ABAIXA_MUSICA_RE.search(heard) or AUMENTA_MUSICA_RE.search(heard):
+                MUSICA.volume(-0.1 if ABAIXA_MUSICA_RE.search(heard) else 0.1)
+                if robot: robot.gesture("sim")
+                idle_ev.set()
+                continue
+            if SILENCIO_RE.search(heard) and not GRAVAR_RE.search(heard):
+                MUSICA.parar()  # "silencio" com musica: para tudo (e fica mudo logo abaixo)
+            elif not args.texto and not chamou and not t_end < nome_ate:  # digitado nao e a musica
+                log(f"[musica] ignorado (nao veio pelo nome): \"{heard}\"")
+                idle_ev.set()
+                continue
         if mudo:
             if not chamou:
                 log(f"[silencio] ignorado: \"{heard}\"")
@@ -973,7 +1025,14 @@ def main():
         else:
             th.join(10)
         t_stt = time.time()
-        extra = "\n".join(x for x in (prog.contexto(), comandos.contexto(), nota_nome) if x)
+        nota_musica = ""
+        if MUSICA.tocando:
+            nota_musica = f'Tocando agora no seu alto-falante: "{musica_mod.nome_de(MUSICA.atual)}".'
+        if MUSICA_RE.search(heard):
+            nomes = [n for _, n in musica_mod.listar(200)]
+            nota_musica += ("\nSuas musicas (" + str(len(nomes)) + "): " + "; ".join(nomes[:60])) if nomes else \
+                "\nVoce ainda nao tem nenhuma musica guardada (o dono precisa por os arquivos em ponte/musicas/)."
+        extra = "\n".join(x for x in (prog.contexto(), comandos.contexto(), nota_nome, nota_musica.strip()) if x)
         r = brain.ask(heard, seen.get("jpeg"), seen.get("faces"), extra)
         t_brain = time.time()
         log(f"[cerebro] ({t_brain - t_stt:.1f}s) {json.dumps(r, ensure_ascii=False)}")
@@ -998,16 +1057,35 @@ def main():
             log(f"[comandos] aprendi: quando \"{ens['quando']}\" -> {ens['fazer']}")
         if isinstance(r.get("esquecer_comando"), str) and r["esquecer_comando"].strip():
             log(f"[comandos] esqueci {comandos.esquece(r['esquecer_comando'])}: {r['esquecer_comando']}")
+        tocar_depois = None  # a musica comeca depois da fala (senao a fala pausaria a musica nova)
+        pedido = r.get("musica")
+        if isinstance(pedido, str) and pedido.strip():
+            if re.fullmatch(r"\s*(parar|pare|para|stop|nenhuma)\s*", pedido, re.I):
+                MUSICA.parar()
+            else:
+                tocar_depois = musica_mod.achar(pedido)
+                if tocar_depois:
+                    log(f"[musica] pedido \"{pedido}\" -> {tocar_depois}")
+                    MUSICA.parar()  # troca de musica: a antiga nao volta depois da fala
+                else:
+                    log(f"[musica] nao achei \"{pedido}\" em: {'; '.join(musica_mod.pastas()) or 'nenhuma pasta'}")
+                    r["fala"] = (f"Nao achei {pedido} nas minhas musicas. Coloque o arquivo de audio na pasta "
+                                 f"musicas, dentro da pasta ponte, e me peca de novo.")
         log(f"[tempo] fim da fala -> inicio da resposta: {time.time() - t_end:.1f}s "
             f"(ouvir+foto {t_stt - t_end:.1f}s, pensar {t_brain - t_stt:.1f}s)")
         if auto_results and auto_results[-1] is not None:
             auto_results[-1].update(ouviu=heard, resposta=r.get("fala", ""), latencia=round(time.time() - t_end, 1),
                                     foto=bool(seen.get("jpeg")))
         speak(robot, ears, r.get("fala", ""), args.volume, on_pc)
+        if tocar_depois and sair_com is None:
+            MUSICA.tocar(tocar_depois)
         idle_ev.set()
         if sair_com is not None:
             log(f"[autoprog] saindo para o supervisor gravar (codigo {sair_com})")
+            MUSICA.parar()
             sys.exit(sair_com)
+
+    MUSICA.parar()  # devolve o eco da placa ao normal (echo 0)
 
     if auto_results:
         log("[autoteste] RESULTADO:")

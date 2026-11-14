@@ -24,6 +24,9 @@ ponte/maquina.json
 apresentacao/slides/
 apresentacao/audio/
 
+# Musicas do Jaspy (arquivos de audio com direito autoral: so nesta maquina)
+ponte/musicas/
+
 # Gravacoes de audio dos testes
 ponte/testes/gravacoes/
 ponte/gravacoes/
