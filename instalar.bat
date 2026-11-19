@@ -21,7 +21,7 @@ echo === 4/4 Verificacoes ===
 where claude >nul 2>nul && (echo Claude Code: OK) || (echo [AVISO] comando 'claude' nao encontrado: instale o Claude Code e faca login - ele e o cerebro do robo.)
 powershell -NoProfile -Command "Add-Type -AssemblyName System.Speech; $v=(New-Object System.Speech.Synthesis.SpeechSynthesizer).GetInstalledVoices() | %% { $_.VoiceInfo.Name }; if ($v -match 'Maria') { 'Voz Microsoft Maria (pt-BR): OK' } else { '[AVISO] voz Microsoft Maria nao instalada: Configuracoes > Hora e idioma > Fala > adicionar Portugues (Brasil)' }"
 where pio >nul 2>nul || if not exist "%USERPROFILE%\.platformio\penv\Scripts\pio.exe" echo [AVISO] PlatformIO nao encontrado: so e necessario para REGRAVAR a placa ^(instale a extensao PlatformIO IDE no VS Code^).
-ponte\.venv\Scripts\python -c "import serial.tools.list_ports as l; p=[x.device for x in l.comports() if x.vid==0x1A86]; print('Placa (CH343) em: ' + (', '.join(p) if p else 'NAO ENCONTRADA - conecte o cabo USB / instale o driver CH343'))"
+ponte\.venv\Scripts\python -c "import serial.tools.list_ports as l; p=[x.device for x in l.comports() if x.vid in (0x303A,0x2886,0x1A86)]; print('Placa (XIAO/Freenove) em: ' + (', '.join(p) if p else 'NAO ENCONTRADA - conecte o cabo USB'))"
 
 echo.
 echo Pronto! Para conversar com o robo:

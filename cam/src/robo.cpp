@@ -98,23 +98,37 @@ bool robo_speaking() { return speaking; }
 
 static void i2s_init() {
   i2s_config_t mic = {};
+#if MIC_PDM
+  // XIAO Sense: microfone PDM embutido. O periferico PDM->PCM do S3 so existe no I2S0.
+  mic.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM);
+  mic.sample_rate = AUDIO_RATE;
+  mic.bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT;
+  mic.channel_format = I2S_CHANNEL_FMT_ONLY_LEFT;
+#else
+  // INMP441 (I2S padrao, 24 bits em quadros de 32)
   mic.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX);
   mic.sample_rate = AUDIO_RATE;
   mic.bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT;
   mic.channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT;  // le os 2 canais e escolhe o que tem sinal
+#endif
   mic.communication_format = I2S_COMM_FORMAT_STAND_I2S;
   mic.dma_buf_count = MIC_DMA_COUNT;  // DMA fica na RAM interna: manter pequeno (folga vem do buffer na PSRAM)
   mic.dma_buf_len = MIC_DMA_LEN;
   i2s_driver_install(I2S_NUM_0, &mic, 0, NULL);
   i2s_pin_config_t mp = {};
   mp.mck_io_num = I2S_PIN_NO_CHANGE;
+#if MIC_PDM
+  mp.bck_io_num = I2S_PIN_NO_CHANGE; mp.ws_io_num = MIC_PDM_CLK;
+  mp.data_out_num = I2S_PIN_NO_CHANGE; mp.data_in_num = MIC_PDM_DATA;
+#else
   mp.bck_io_num = MIC_SCK; mp.ws_io_num = MIC_WS;
   mp.data_out_num = I2S_PIN_NO_CHANGE; mp.data_in_num = MIC_SD;
+#endif
   i2s_set_pin(I2S_NUM_0, &mp);
 
   i2s_config_t spk = {};
   spk.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX);
-  spk.sample_rate = AUDIO_RATE;
+  spk.sample_rate = SPK_RATE;
   spk.bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT;
   spk.channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT;
   spk.communication_format = I2S_COMM_FORMAT_STAND_I2S;
@@ -171,22 +185,35 @@ static inline float hp_biquad(int k, float x) {
 
 static void mic_reader_task(void *) {
   hp_design(250.0f, AUDIO_RATE);
-  int32_t *raw = (int32_t *)ps_malloc(MIC_READ_FRAMES * 2 * sizeof(int32_t));
+  int32_t *raw = (int32_t *)ps_malloc(MIC_READ_FRAMES * 2 * sizeof(int32_t));  // PDM usa como int16[]
+  int16_t *raw16 = (int16_t *)raw;
   int16_t *out = (int16_t *)ps_malloc(MIC_READ_FRAMES * sizeof(int16_t));
   while (true) {
     size_t got = 0;
+#if MIC_PDM
+    i2s_read(I2S_NUM_0, raw16, MIC_READ_FRAMES * 2, &got, portMAX_DELAY);
+    int n = got / 2;
+#else
     i2s_read(I2S_NUM_0, raw, MIC_READ_FRAMES * 8, &got, portMAX_DELAY);
     int n = got / 8;
+#endif
     mic_read_samples += n; tot_read += n;
     if (!mic_client_on && !link_mic_on()) continue;   // ninguem ouvindo: descarta
+#if !MIC_PDM
     int64_t el = 0, er = 0;
     for (int i = 0; i < n; i++) { el += abs(raw[2 * i] >> 16); er += abs(raw[2 * i + 1] >> 16); }
     int ch = (el >= er) ? 0 : 1;    // usa o canal que tem sinal (L/R do INMP441)
+#endif
     bool mute = !echo_test && (speaking || millis() < mic_mute_until);
-    // Passa-altas de 4a ordem (2 biquads Butterworth, 250 Hz): remove a deriva DC do INMP441 e o
-    // zumbido da rede eletrica (120 Hz / 30 Hz medidos). Voz fica com qualidade "telefone" (otima p/ Whisper).
+    // Passa-altas de 4a ordem (2 biquads Butterworth, 250 Hz): remove a deriva DC e o zumbido da rede
+    // eletrica (120 Hz / 30 Hz medidos no INMP441). Voz fica com qualidade "telefone" (otima p/ Whisper).
     for (int i = 0; i < n; i++) {
-      float y = hp_biquad(1, hp_biquad(0, (float)(raw[2 * i + ch] >> 14)));
+#if MIC_PDM
+      float x = (float)raw16[i] * MIC_GAIN;
+#else
+      float x = (float)(raw[2 * i + ch] >> 14);
+#endif
+      float y = hp_biquad(1, hp_biquad(0, x));
       int32_t s = mute ? 0 : (int32_t)y;
       out[i] = (int16_t)constrain(s, -32768, 32767);
     }
@@ -239,8 +266,8 @@ static void mic_sender_task(void *) {
 // ---------- PC -> alto-falante (UDP, porta 83) ----------
 // Pacotes [seq uint32 LE][PCM16 mono 16 kHz]. seq 0 = nova fala; seq 0xFFFFFFFF = fim da fala.
 // Um "colchao" de 300 ms na PSRAM absorve os atrasos da rede antes de comecar a tocar.
-#define SPK_RB_BYTES (AUDIO_RATE * 2 * 20)   // ate 20 s de fala
-#define SPK_PREBUFFER (AUDIO_RATE * 2 * 3 / 10)
+#define SPK_RB_BYTES (SPK_RATE * 2 * 20)   // ate 20 s de fala
+#define SPK_PREBUFFER (SPK_RATE * 2 * 3 / 10)
 static StreamBufferHandle_t spk_rb = NULL;
 static volatile bool spk_end = false;
 static volatile uint32_t spk_last_rx = 0;
@@ -304,7 +331,7 @@ static void spk_play_task(void *) {
       size_t w;
       i2s_write(I2S_NUM_1, st, n * 4, &w, portMAX_DELAY);
     }
-    delay(SPK_DMA_COUNT * SPK_DMA_LEN * 1000 / AUDIO_RATE + 20);  // espera o DMA esvaziar
+    delay(SPK_DMA_COUNT * SPK_DMA_LEN * 1000 / SPK_RATE + 20);  // espera o DMA esvaziar
     i2s_zero_dma_buffer(I2S_NUM_1);
     i2s_stop(I2S_NUM_1);    // amplificador dorme (sem clock = repouso automatico, sem chiado)
     spk_end = false;

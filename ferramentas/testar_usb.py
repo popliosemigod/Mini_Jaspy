@@ -36,7 +36,8 @@ print(f"mic: {len(a) / (time.time() - t0):.0f} amostras/s (esperado 16000), ruid
 r.echo(True); time.sleep(0.3)
 while not r.mic_q.empty():
     r.mic_q.get_nowait()
-tone = (np.sin(2 * np.pi * 1000 * np.arange(16000) / 16000) * 16000).astype(np.int16).tobytes()
+from link_usb import SPK_RATE  # noqa: E402
+tone = (np.sin(2 * np.pi * 1000 * np.arange(SPK_RATE) / SPK_RATE) * 16000).astype(np.int16).tobytes()  # 1 s
 rec = []; t0 = time.time()
 r.play(tone)
 for c in r.mic_chunks():

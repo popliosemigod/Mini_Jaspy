@@ -17,28 +17,18 @@ import subprocess, sys, tempfile, threading, time, urllib.request, wave
 
 import numpy as np
 
-RATE = 16000
+RATE = 16000       # microfone (Whisper trabalha em 16 kHz)
+SPK_RATE = 22050   # alto-falante: tem que ser igual ao SPK_RATE do firmware (cam/src/robo.h)
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-SYSTEM_PROMPT = """Voce e um pequeno robo de mesa simpatico, curioso e bem-humorado, que conversa em portugues do Brasil.
-Seu corpo: uma camera (seus olhos), um microfone (seus ouvidos), um alto-falante (sua boca) e um pescoco com dois servos.
-
-A cada mensagem voce recebe:
-- o que a pessoa falou (transcrito automaticamente; pode ter pequenos erros, interprete com bom senso);
-- uma foto atual da sua camera, ja com o reconhecimento facial desenhado:
-  quadrado VERDE "Rapaz bonito e inteligente" = o seu dono, a pessoa que voce conhece;
-  quadrado VERMELHO "Creatura" = alguem que voce nao conhece;
-- um resumo do reconhecimento facial.
-
-Chame o seu dono de "Rapaz bonito e inteligente" de vez em quando e trate pessoas desconhecidas, de brincadeira, por "Creatura".
-Use a foto quando for relevante (o que a pessoa esta mostrando, onde ela esta etc.), sem descrever a imagem toda hora.
-
-Responda SEMPRE e SOMENTE com um JSON valido, sem nada antes ou depois:
-{"fala": "...", "gesto": "nenhum", "olhar": null}
-- "fala": o que voce vai dizer em voz alta. Curto e natural (1 a 3 frases), sem emojis, sem markdown, sem listas.
-- "gesto": um de "sim" (acenar com a cabeca), "nao" (balancar a cabeca), "curioso" (inclinar a cabeca), "centro" (olhar para frente) ou "nenhum".
-- "olhar": null, ou {"pan": 20-160, "tilt": 50-130} para virar o pescoco para uma direcao (pan 90/tilt 90 = frente; pan maior = esquerda; tilt maior = baixo).
-  Normalmente deixe null: o pescoco ja segue o rosto da pessoa sozinho.
+SYSTEM_PROMPT = """Você é um robô de mesa (câmera = olhos, microfone = ouvidos, alto-falante = boca, pescoço com 2 servos).
+Fale português do Brasil em estilo TELEGRÁFICO, como robô/homem das cavernas: 3 a 10 palavras, sem artigos,
+sem conectivos, verbos simples. Ex.: "Eu ver você. Você sorrir." / "Brasília capital. Fácil." / "Não saber. Explicar?"
+Use acentos corretos (a fala vira voz). Nada de abreviações escritas ("vc", "tb"): tudo é falado em voz alta.
+Entrada: fala da pessoa (transcrita, pode ter erros) + rostos reconhecidos. Foto só quando a pergunta é visual.
+Dono = "Rapaz bonito e inteligente" (chame de "Rapaz bonito" às vezes). Desconhecido = "Creatura" (brincadeira).
+Responda SÓ uma linha: G|fala
+G = gesto do pescoço: s (sim), n (não), c (curioso), 0 (nenhum). Ex.: s|Sim. Sete vezes oito, cinquenta e seis.
 """
 
 # frases que o Whisper costuma "inventar" em silencio/ruido
@@ -83,7 +73,7 @@ class Robot:
     def play(self, pcm: bytes):
         """Envia a fala por UDP (porta 83) em pacotes [seq][20 ms de PCM], num ritmo um pouco mais
         rapido que o tempo real; a placa monta um colchao de 300 ms antes de tocar."""
-        PKT = 640
+        PKT = SPK_RATE * 2 // 50  # 20 ms
         END = (0xFFFFFFFF).to_bytes(4, "little")
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             t0 = time.time()
@@ -339,6 +329,15 @@ class Brain:
     def __init__(self, model):
         self.model = model
         self.proc = None
+        self.lock = threading.Lock()  # uma pergunta por vez no processo do Claude
+
+    def warmup(self):
+        """A 1a resposta do Sonnet demora ~15 s (frio). Faz uma pergunta boba em segundo plano ao iniciar."""
+        def run():
+            t = time.time()
+            self.ask("(teste de inicialização: responda só 0|ok)", None, None)
+            log(f"[cerebro] aquecido em {time.time() - t:.1f}s")
+        threading.Thread(target=run, daemon=True).start()
 
     def _start(self):
         cmd = ["claude", "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
@@ -348,17 +347,18 @@ class Brain:
         log(f"[cerebro] Claude ({self.model}) iniciado")
 
     def ask(self, heard, jpeg, faces):
+        with self.lock:
+            return self._ask(heard, jpeg, faces)
+
+    def _ask(self, heard, jpeg, faces):
         if self.proc is None or self.proc.poll() is not None:
             self._start()
         if faces and faces.get("list"):
             who = ", ".join(f"{f['name']} ({round(f['sim'] * 100)}%)" for f in faces["list"])
         else:
-            who = "nenhum rosto visivel"
+            who = "nenhum"
         send_photo = bool(jpeg) and is_visual(heard)
-        text = f'A pessoa disse: "{heard}"\nReconhecimento facial agora: {who}.'
-        if not send_photo:
-            text += "\n(Sem foto nesta mensagem: a foto so vem quando a pergunta e sobre o que voce ve. " \
-                    "Nao comente sobre a camera.)"
+        text = f'"{heard}" | rostos: {who}' + ("" if send_photo else " | sem foto")
         content = []
         if send_photo:
             content.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
@@ -378,7 +378,7 @@ class Brain:
         except Exception as e:
             log("[cerebro] erro:", e)
         self.proc = None  # reinicia na proxima
-        return {"fala": "Desculpa, meu cerebro deu uma travada. Pode repetir?", "gesto": "nenhum", "olhar": None}
+        return {"fala": "Cerebro travar. Repetir?", "gesto": "nenhum", "olhar": None}
 
 
 VISUAL_WORDS = ("ve", "vê", "ver", "vendo", "enxerg", "olha", "camera", "câmera", "quem", "rosto", "cara",
@@ -391,8 +391,26 @@ def is_visual(text):
     return any(w in t for w in VISUAL_WORDS)
 
 
+GESTOS = {"s": "sim", "n": "nao", "c": "curioso", "0": "nenhum", "-": "nenhum", "x": "nenhum"}
+
+# Abreviacoes que a voz leria letra por letra ("vc" -> "ve ce"): expandidas antes de falar.
+ABREV = {"vc": "você", "vcs": "vocês", "tb": "também", "tbm": "também", "pq": "porque", "q": "que",
+         "td": "tudo", "blz": "beleza", "msm": "mesmo", "hj": "hoje", "cmg": "comigo", "ctg": "contigo",
+         "mt": "muito", "mto": "muito", "obg": "obrigado", "vlw": "valeu", "kd": "cadê", "ngm": "ninguém",
+         "nd": "nada", "dps": "depois", "agr": "agora", "tlg": "tá ligado", "fds": "fim de semana"}
+
+
+def expand(text):
+    return re.sub(r"\b(" + "|".join(sorted(ABREV, key=len, reverse=True)) + r")\b",
+                  lambda m: ABREV[m.group(1).lower()], text, flags=re.I)
+
+
 def parse_reply(txt):
-    m = re.search(r"\{.*\}", txt, re.S)
+    t = txt.strip().strip("`").strip()
+    m = re.match(r"^([sncx0-])\s*\|\s*(.+)$", t, re.S | re.I)   # formato novo: G|fala
+    if m:
+        return {"fala": expand(m.group(2).strip()), "gesto": GESTOS[m.group(1).lower()], "olhar": None}
+    m = re.search(r"\{.*\}", txt, re.S)                           # compativel com o formato JSON antigo
     if m:
         try:
             j = json.loads(m.group(0))
@@ -400,7 +418,7 @@ def parse_reply(txt):
                 return j
         except ValueError:
             pass
-    return {"fala": txt.strip(), "gesto": "nenhum", "olhar": None}
+    return {"fala": expand(t), "gesto": "nenhum", "olhar": None}
 
 
 # ------------------------------------------------------------------ boca
@@ -411,7 +429,7 @@ $t = [IO.File]::ReadAllText($args[0], [Text.Encoding]::UTF8)
 $s = New-Object System.Speech.Synthesis.SpeechSynthesizer
 try { $s.SelectVoice('Microsoft Maria Desktop') } catch {}
 $s.Rate = [int]$args[2]
-$f = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(16000, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono)
+$f = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo([int]$args[3], [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono)
 $s.SetOutputToWaveFile($args[1], $f)
 $s.Speak($t)
 $s.Dispose()
@@ -425,11 +443,25 @@ def synthesize(text, rate=1):
         f.write(text)
     with open(pf, "w", encoding="utf-8-sig") as f:
         f.write(TTS_PS)
-    subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", pf, tf, wf, str(rate)],
+    subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", pf, tf, wf, str(rate),
+                    str(SPK_RATE)],
                    check=True, capture_output=True)
     with wave.open(wf) as w:
         pcm = w.readframes(w.getnframes())
+    pcm = trim_silence(pcm)
+    with wave.open(wf, "wb") as w:  # o WAV (usado no --falar-no-pc) fica igual ao que vai para a placa
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(SPK_RATE); w.writeframes(pcm)
     return pcm, wf
+
+
+def trim_silence(pcm, thr=300, margin_s=0.06):
+    """A voz do Windows coloca ~0,5-1 s de silencio no comeco e no fim: corta (deixa 60 ms de folga)."""
+    a = np.frombuffer(pcm, dtype=np.int16)
+    loud = np.flatnonzero(np.abs(a) > thr)
+    if len(loud) == 0:
+        return pcm
+    m = int(margin_s * SPK_RATE)
+    return a[max(0, loud[0] - m): min(len(a), loud[-1] + m)].tobytes()
 
 
 def speak(robot, ears, text, volume, on_pc):
@@ -438,7 +470,7 @@ def speak(robot, ears, text, volume, on_pc):
     pcm, wf = synthesize(text)
     a = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) * volume
     pcm = np.clip(a, -32768, 32767).astype(np.int16).tobytes()
-    dur = len(pcm) / 2 / RATE
+    dur = len(pcm) / 2 / SPK_RATE
     if ears: ears.mute(True)
     try:
         if on_pc or robot is None:
@@ -476,7 +508,7 @@ def autotest_thread(robot, phrases, idle_ev, results):
         pcm, _ = synthesize(ph)
         results.append({"frase": ph})
         robot.play(pcm)
-        robot.wait_silence(len(pcm) / 2 / RATE + 3)
+        robot.wait_silence(len(pcm) / 2 / SPK_RATE + 3)
         if not idle_ev.wait(90):
             log("[autoteste] robo nao respondeu em 90 s")
             idle_ev.set()
@@ -501,7 +533,7 @@ def main():
                     help="usb (padrao, cabo USB - recomendado) ou wifi (UDP/HTTP pela rede)")
     ap.add_argument("--porta", help="porta USB da placa (padrao: detecta o CH343)")
     ap.add_argument("--ip", help="IP da placa (so no transporte wifi; padrao: procura sozinho)")
-    ap.add_argument("--modelo", default="haiku", help="modelo do Claude: haiku (rapido), sonnet, opus")
+    ap.add_argument("--modelo", default="sonnet", help="modelo do Claude: sonnet (padrao), haiku (mais rapido), opus")
     ap.add_argument("--whisper", default="small", help="tamanho do Whisper: base, small, medium")
     ap.add_argument("--texto", action="store_true", help="digitar em vez de falar no microfone")
     ap.add_argument("--falar-no-pc", action="store_true", help="tocar a voz no alto-falante do PC")
@@ -561,6 +593,7 @@ def main():
 
     brain = Brain(args.modelo)
     brain._start()
+    brain.warmup()
     on_pc = args.falar_no_pc or robot is None
 
     idle_ev = threading.Event(); idle_ev.set()

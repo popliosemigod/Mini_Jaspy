@@ -6,8 +6,15 @@ static void (*cmd_cb)(const char *) = NULL;
 static volatile uint32_t mic_req_until = 0;
 
 void link_begin() {
+  // Freenove: Serial = UART0 via chip CH343, 2 Mbaud.
+  // XIAO: Serial = USB nativa do ESP32-S3 (HWCDC); a velocidade e a da USB e o "baud" e ignorado.
   Serial.setRxBufferSize(32768);
+#if ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE
+  Serial.setTxBufferSize(32768);  // cabe uma foto JPEG inteira
+  Serial.setTxTimeoutMs(50);      // sem o PC lendo (robo.py fechado), desiste rapido em vez de travar
+#else
   Serial.setTxBufferSize(16384);
+#endif
   Serial.begin(LINK_BAUD);
   tx_mutex = xSemaphoreCreateMutex();
 }

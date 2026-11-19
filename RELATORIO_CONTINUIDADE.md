@@ -1,8 +1,15 @@
 # Relatório de continuidade — Robô ESP32-S3 com o Claude como cérebro
 
-Última atualização: **2026-11-11**. Escrito no app Claude (aba Code) para o Claude Code no VS Code,
+Última atualização: **2026-11-19**. Escrito no app Claude (aba Code) para o Claude Code no VS Code,
 **em outra máquina**, continuar de onde parou. Repositório: <https://github.com/popliosemigod/Mini_Jaspy>
 (**público**).
+
+> ### 🆕 2026-11-19 — Nova placa: XIAO ESP32-S3 Sense (branch `xiao-sense`)
+> O usuário trocou a placa por uma **Seeed XIAO ESP32-S3 Sense** (câmera e microfone **embutidos**) e
+> pediu: respostas mais rápidas com linguagem "telegráfica", **Sonnet** como modelo e melhor qualidade
+> de som no mesmo MAX98357A, com resistores e capacitores. Feito, **compilado, mas não testado no
+> hardware** (nenhuma placa estava no USB). Detalhes em **§0**. O que vale para as duas placas continua
+> nas seções seguintes.
 
 > ### ⚡ Primeiros passos na máquina nova
 > 1. `git clone https://github.com/popliosemigod/Mini_Jaspy.git` num caminho **curto, sem acentos e
@@ -15,6 +22,67 @@
 > 4. **Grave a placa** (`pio run -t upload` em `cam/`): o firmware com o **Wi-Fi próprio da placa** (§6.4)
 >    foi compilado, mas **ainda não foi gravado** (a placa não estava no USB).
 > 5. Histórico completo da conversa: `historico/conversa_legivel.md` (sem senhas).
+
+---
+
+## 0. XIAO ESP32-S3 Sense (branch `xiao-sense`) — 🟡 compilado, NÃO testado no hardware
+
+### 0.1 Perfis de placa no firmware
+`cam/platformio.ini` tem dois ambientes, e o código escolhe pinos e periféricos por `#if`:
+
+| Ambiente | Comando | Placa |
+|---|---|---|
+| `xiao_sense` (**padrão**) | `pio run -t upload` | XIAO ESP32-S3 Sense, `-DPLACA_XIAO_SENSE` |
+| `freenove_cam` | `pio run -e freenove_cam -t upload` | Freenove ESP32-S3 CAM + INMP441 (montagem antiga) |
+
+Os dois compilam (XIAO: 4,36 MB de 7,9 MB de flash, RAM 23,7%; Freenove: 4,37 MB de 6,5 MB).
+
+### 0.2 O que muda na XIAO
+- **Câmera** (conector da Sense, OV2640 ou OV3660): XCLK 10, SIOD 40, SIOC 39, D7..D0 = 48, 11, 12, 14,
+  16, 18, 17, 15, VSYNC 38, HREF 47, PCLK 13 (`main.cpp`).
+- **Microfone PDM embutido**: CLK GPIO 42, DATA GPIO 41, no **I2S0 em modo PDM** (16 bits mono),
+  ganho digital `MIC_GAIN 4.0` + o mesmo passa-altas de 250 Hz (`robo.cpp`). ⚠️ **Ganho não calibrado**:
+  medir com `robo.py --nivel` / `ferramentas/ruido_mic.py` e ajustar `MIC_GAIN` em `robo.h`.
+- **USB nativa** (HWCDC, VID `0x303A`): o link binário é o mesmo; o "baud" é ignorado. Buffer de TX de
+  32 KB (cabe um JPEG) e timeout de 50 ms (a placa não trava com o `robo.py` fechado). O `link_usb.py`
+  procura VID 0x303A, 0x2886 e 0x1A86 nessa ordem.
+- **Partição** própria `particoes_xiao_8MB.csv` (app de 7,9 MB, sem OTA), porque a XIAO tem 8 MB de flash.
+- **Pinos externos**: MAX98357A DIN = D3 (GPIO 4), BCLK = D4 (GPIO 5), LRC = D5 (GPIO 6);
+  servos pan = D0 (GPIO 1), tilt = D1 (GPIO 2). Livres: D2 (GPIO 3, strapping), D6/D7 (43/44),
+  D8–D10 (7–9, que são do cartão SD da Sense: não usar cartão).
+
+### 0.3 Qualidade do som (MAX98357A)
+- Alto-falante em **22.050 Hz** (`SPK_RATE`; antes 16 kHz). A voz Maria é sintetizada direto em 22 kHz
+  e o `link_usb`/UDP mandam pacotes de 20 ms nessa taxa. O microfone continua em 16 kHz (Whisper).
+- **R1 100 kΩ do GAIN para o VIN** → ganho de 3 dB (antes 9 dB) com `SPK_VOLUME 0.5` (antes 0.25):
+  mesmo volume final, o dobro da faixa digital, menos chiado. **Sem o R1, voltar `SPK_VOLUME` para 0.25.**
+- **33 Ω em série** em DIN/BCLK/LRC; **10 µF + 100 nF cerâmicos + 470 µF eletrolítico** no VIN, colados
+  no módulo; ferrite opcional no 5 V. Tabela completa no `LEIAME.md`.
+
+### 0.4 Cérebro: Sonnet + linguagem telegráfica
+- `--modelo sonnet` é o padrão. System prompt curto e com acentos: frases de 3 a 10 palavras, estilo
+  "robô/homem das cavernas" ("Brasília capital. Fácil."), sem abreviações escritas.
+- Resposta numa linha **`G|fala`** (G = `s`/`n`/`c`/`0` = sim/não/curioso/nenhum) em vez de JSON:
+  menos tokens. O `parse_reply` aceita também o JSON antigo e texto solto, e **expande abreviações**
+  (vc → você, tb → também…) antes da voz.
+- A mensagem para o Claude ficou compacta: `"fala" | rostos: X | sem foto`.
+- **Aquecimento**: ao iniciar, o `robo.py` faz uma pergunta boba ao Claude, porque a 1ª resposta do
+  Sonnet demora ~15 s fria. O `Brain` tem um lock (uma pergunta por vez).
+- **Silêncio cortado** no começo e no fim da voz do Windows (`trim_silence`).
+- Medido no PC, sem placa (CPU livre): pensar **4,2 s** (mediana), **6 palavras** por resposta (antes
+  ~28), síntese 1,0 s, fala ~4,6 s. Ex.: "Quanto é nove vezes sete?" → "Nove vezes sete, sessenta e três."
+
+### 0.5 Para testar quando a XIAO estiver no USB
+1. `pio run -t upload` em `cam/` (ambiente `xiao_sense`). Se a gravação não começar: segure **BOOT**,
+   aperte **RESET**, solte o BOOT e grave de novo.
+2. `ponte\.venv\Scripts\python ferramentas\ler_serial.py 40 --reset`: ver o boot, "Sensor PID" (OV2640
+   = 0x26, OV3660 = 0x3660) e o cadastro.
+3. `ferramentas\testar_usb.py`: foto, taxa do mic (16 k/s) e **autoteste acústico** (tom de 1 kHz).
+4. `ferramentas\ruido_mic.py` e `robo.py --nivel`: calibrar `MIC_GAIN` (o ruído de fundo deve ficar
+   bem abaixo da fala; o detector de voz se calibra sozinho a partir daí).
+5. `robo.py --autoteste "Oi robô|Qual é a capital do Brasil?"` com o mic perto do alto-falante, e depois
+   uma conversa de verdade.
+6. Se a imagem vier de ponta-cabeça (OV2640 da Sense), ajustar `set_vflip`/`set_hmirror` no `init_camera()`.
 
 ---
 

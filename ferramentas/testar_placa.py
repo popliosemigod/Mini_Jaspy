@@ -40,7 +40,8 @@ print(f"mic: {len(a) / el:.0f} amostras/s (esperado 16000), pacotes recebidos {m
 np.save("mic_teste.npy", a)
 
 # alto-falante: tom 440 Hz por 1,5 s
-tone = (np.sin(2 * np.pi * 440 * np.arange(24000) / 16000) * 12000).astype(np.int16).tobytes()
+from robo import SPK_RATE  # noqa: E402
+tone = (np.sin(2 * np.pi * 440 * np.arange(SPK_RATE * 3 // 2) / SPK_RATE) * 12000).astype(np.int16).tobytes()  # 1,5 s
 t = time.time(); r.play(tone); r.wait_silence(5)
 print(f"spk: tom de 1,5 s enviado e tocado em {time.time() - t:.1f}s (deve ouvir um bip)")
 

@@ -9,14 +9,21 @@ import json, queue, threading, time
 import serial
 import serial.tools.list_ports
 
-BAUD = 2000000
-CH343_VID = 0x1A86
+BAUD = 2000000      # Freenove (CH343). Na XIAO a USB e nativa e o baud e ignorado.
+SPK_RATE = 22050    # taxa do alto-falante: igual ao SPK_RATE do firmware (cam/src/robo.h)
+
+# Placas conhecidas, por VID USB:
+#   0x303A = Espressif (USB nativa do ESP32-S3: XIAO ESP32-S3 Sense)
+#   0x2886 = Seeed (XIAO com USB pelo TinyUSB)
+#   0x1A86 = WCH CH343 (Freenove ESP32-S3 CAM)
+KNOWN_VIDS = (0x303A, 0x2886, 0x1A86)
 
 
 def find_port():
-    for p in serial.tools.list_ports.comports():
-        if p.vid == CH343_VID:
-            return p.device
+    for vid in KNOWN_VIDS:
+        for p in serial.tools.list_ports.comports():
+            if p.vid == vid:
+                return p.device
     return None
 
 
@@ -151,7 +158,7 @@ class UsbRobot:
 
     def play(self, pcm: bytes):
         """Envia a fala em blocos de 20 ms, um pouco mais rapido que o tempo real."""
-        PKT = 640
+        PKT = SPK_RATE * 2 // 50  # 20 ms de PCM16 mono
         self.send("B")
         t0 = time.time()
         for k, i in enumerate(range(0, len(pcm), PKT)):
