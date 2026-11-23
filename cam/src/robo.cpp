@@ -127,9 +127,16 @@ bool robo_speaking() { return speaking; }
 
 static void i2s_init() {
   i2s_config_t mic = {};
+#ifdef MIC_PDM
+  // XIAO Sense: microfone PDM embutido (so o I2S0 faz PDM no S3). Cada amostra ja chega em 16 bits, os 2
+  // canais intercalados; o reader escolhe o que tem sinal (nao se adivinha o lado do microfone).
+  mic.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM);
+  mic.bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT;
+#else
   mic.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX);
-  mic.sample_rate = AUDIO_RATE;
   mic.bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT;
+#endif
+  mic.sample_rate = AUDIO_RATE;
   mic.channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT;  // le os 2 canais e escolhe o que tem sinal
   mic.communication_format = I2S_COMM_FORMAT_STAND_I2S;
   mic.dma_buf_count = MIC_DMA_COUNT;  // DMA fica na RAM interna: manter pequeno (folga vem do buffer na PSRAM)
@@ -137,8 +144,13 @@ static void i2s_init() {
   i2s_driver_install(I2S_NUM_0, &mic, 0, NULL);
   i2s_pin_config_t mp = {};
   mp.mck_io_num = I2S_PIN_NO_CHANGE;
+#ifdef MIC_PDM
+  mp.bck_io_num = I2S_PIN_NO_CHANGE; mp.ws_io_num = MIC_CLK_PDM;  // no PDM o "ws" e o clock do microfone
+  mp.data_out_num = I2S_PIN_NO_CHANGE; mp.data_in_num = MIC_DATA_PDM;
+#else
   mp.bck_io_num = MIC_SCK; mp.ws_io_num = MIC_WS;
   mp.data_out_num = I2S_PIN_NO_CHANGE; mp.data_in_num = MIC_SD;
+#endif
   i2s_set_pin(I2S_NUM_0, &mp);
 
   i2s_config_t spk = {};
@@ -198,24 +210,41 @@ static inline float hp_biquad(int k, float x) {
   return y;
 }
 
+#ifdef MIC_PDM
+// Ganho do microfone PDM: o INMP441 chegava em 18 bits (>>14 ja dava voz na casa dos milhares); o PDM da
+// Sense chega em 16 bits. Valor inicial 4; ajustar medindo (ruido da sala ~100-300, voz de perto ~3000+).
+#define MIC_GANHO_PDM 4.0f
+typedef int16_t mic_amostra_t;
+#else
+typedef int32_t mic_amostra_t;
+#endif
+
 static void mic_reader_task(void *) {
   hp_design(250.0f, AUDIO_RATE);
-  int32_t *raw = (int32_t *)ps_malloc(MIC_READ_FRAMES * 2 * sizeof(int32_t));
+  mic_amostra_t *raw = (mic_amostra_t *)ps_malloc(MIC_READ_FRAMES * 2 * sizeof(mic_amostra_t));
   int16_t *out = (int16_t *)ps_malloc(MIC_READ_FRAMES * sizeof(int16_t));
   while (true) {
     size_t got = 0;
-    i2s_read(I2S_NUM_0, raw, MIC_READ_FRAMES * 8, &got, portMAX_DELAY);
-    int n = got / 8;
+    i2s_read(I2S_NUM_0, raw, MIC_READ_FRAMES * 2 * sizeof(mic_amostra_t), &got, portMAX_DELAY);
+    int n = got / (2 * sizeof(mic_amostra_t));
     mic_read_samples += n; tot_read += n;
     if (!mic_client_on && !link_mic_on()) continue;   // ninguem ouvindo: descarta
     int64_t el = 0, er = 0;
+#ifdef MIC_PDM
+    for (int i = 0; i < n; i++) { el += abs((int)raw[2 * i]); er += abs((int)raw[2 * i + 1]); }
+#else
     for (int i = 0; i < n; i++) { el += abs(raw[2 * i] >> 16); er += abs(raw[2 * i + 1] >> 16); }
-    int ch = (el >= er) ? 0 : 1;    // usa o canal que tem sinal (L/R do INMP441)
+#endif
+    int ch = (el >= er) ? 0 : 1;    // usa o canal que tem sinal (L/R do INMP441 / lado do PDM)
     bool mute = !echo_test && (speaking || millis() < mic_mute_until);
     // Passa-altas de 4a ordem (2 biquads Butterworth, 250 Hz): remove a deriva DC do INMP441 e o
     // zumbido da rede eletrica (120 Hz / 30 Hz medidos). Voz fica com qualidade "telefone" (otima p/ Whisper).
     for (int i = 0; i < n; i++) {
+#ifdef MIC_PDM
+      float y = hp_biquad(1, hp_biquad(0, (float)raw[2 * i + ch] * MIC_GANHO_PDM));
+#else
       float y = hp_biquad(1, hp_biquad(0, (float)(raw[2 * i + ch] >> 14)));
+#endif
       int32_t s = mute ? 0 : (int32_t)y;
       out[i] = (int16_t)constrain(s, -32768, 32767);
     }

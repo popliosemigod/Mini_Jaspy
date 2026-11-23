@@ -449,6 +449,16 @@ debate. Falas geradas antes (voz neural, 2 tentativas de 20 s por trecho; Maria 
 **Resultado:** seminário "Do Protótipo ao Chão de Fábrica" apresentado inteiro, 6 slides, 26 trechos,
 **5,8 min**, e o dono aprovou ("foi perfeito"). Volume no máximo (comando `volume 0-100` na placa).
 
+### 13.9 Troca da placa para a XIAO ESP32-S3 Sense (23/11/2026, 🟡 compila, NÃO testada)
+Pedido do dono: trocar o microcontrolador pela XIAO Sense (câmera e microfone na placa), mantendo **dois
+servos** no pescoço. Segundo ambiente `xiao` em `cam/platformio.ini` (o `esp32s3cam` continua o padrão até
+a XIAO ser validada); pinos em `cam/src/placa.h`; ligação, diferenças e roteiro de ensaio em
+[`cam/PINAGEM_XIAO.md`](cam/PINAGEM_XIAO.md). Pontos que mudam: microfone **PDM** (GPIO41/42), USB **nativo**
+(`303A:1001`, o PC reconhece as duas), flash de 8 MB com tabela própria (a padrão não comporta os 4,4 MB),
+servos em **GPIO4/5** (38/39 são da câmera). A autoprogramação e o supervisor passam `-e` por
+`PLACA_ENV` (`ponte/maquina.json`). **Pendente na bancada:** gravar, medir o nível do microfone
+(`MIC_GANHO_PDM`), conferir o pescoço e que a placa não reinicia ao falar.
+
 ## 12. Cadastro facial com outras fotos
 
 1. Fotos `.jpeg` em `fotos_cadastro/`.

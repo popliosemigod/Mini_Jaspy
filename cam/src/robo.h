@@ -1,18 +1,8 @@
 #pragma once
 #include <Arduino.h>
 
-// ---------- mapa de pinos (livres na Freenove ESP32-S3 CAM) ----------
-// Microfone INMP441 (I2S0)
-#define MIC_SCK  41
-#define MIC_WS   42
-#define MIC_SD   1
-// Amplificador MAX98357A (I2S1)
-#define SPK_BCLK 47
-#define SPK_LRC  21
-#define SPK_DIN  14
-// Servos do pescoco
-#define SERVO_PAN_PIN  38   // horizontal (esquerda/direita)
-#define SERVO_TILT_PIN 39   // vertical (cima/baixo)
+// Os pinos de cada placa (Freenove ou XIAO Sense) ficam em placa.h
+#include "placa.h"
 
 // Se o pescoco seguir o rosto para o lado errado, troque o sinal (1 / -1)
 #define PAN_DIR  1

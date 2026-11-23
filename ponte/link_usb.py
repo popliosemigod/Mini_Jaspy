@@ -1,4 +1,4 @@
-"""Link binario com a placa pelo cabo USB (UART / CH343) - ver cam/src/link.h.
+"""Link binario com a placa pelo cabo USB (CH343 na Freenove, USB nativo na XIAO) - ver cam/src/link.h.
 
 Quadro: [0xA5][0x5A][tipo:1][tamanho:2 LE][dados][xor dos dados:1]
 Placa -> PC: 'M' microfone, 'L' log, 'J' JPEG, 'F' JSON de rostos/estado, 'S' estatisticas
@@ -9,15 +9,19 @@ import json, queue, threading, time
 import serial
 import serial.tools.list_ports
 
-BAUD = 2000000
-CH343_VID = 0x1A86
+BAUD = 2000000  # no USB nativo da XIAO o baud nao importa
+CH343_VID = 0x1A86   # Freenove ESP32-S3 CAM (USB-serial CH343)
+ESPRESSIF_VID = 0x303A  # XIAO ESP32-S3 Sense (USB nativo da propria ESP32-S3)
 
 
 def find_port():
+    """A placa do robo no USB. Com varias, prefere a CH343; senao a primeira ESP32-S3 de USB nativo.
+    Com mais de uma ESP32-S3 plugada (ex.: a cabeca do Jaspy do laboratorio) use --porta."""
+    achadas = {CH343_VID: None, ESPRESSIF_VID: None}
     for p in serial.tools.list_ports.comports():
-        if p.vid == CH343_VID:
-            return p.device
-    return None
+        if p.vid in achadas and achadas[p.vid] is None:
+            achadas[p.vid] = p.device
+    return achadas[CH343_VID] or achadas[ESPRESSIF_VID]
 
 
 class UsbRobot:
@@ -26,7 +30,7 @@ class UsbRobot:
     def __init__(self, port=None, on_log=None):
         self.port = port or find_port()
         if not self.port:
-            raise RuntimeError("placa nao encontrada em nenhuma porta USB (CH343)")
+            raise RuntimeError("placa nao encontrada em nenhuma porta USB (CH343 ou XIAO ESP32-S3)")
         s = serial.Serial()
         s.port, s.baudrate, s.timeout = self.port, BAUD, 0.1
         s.dtr = False; s.rts = False  # nao reinicia a placa ao abrir

@@ -1,0 +1,8 @@
+# Flash de 8 MB da XIAO ESP32-S3 Sense. O firmware tem ~4,4 MB (modelos de rosto + 9 fotos de cadastro
+# embutidas) e a tabela padrao de 8 MB so da 3,2 MB ao programa. Sem OTA: a autoprogramacao grava pelo USB.
+# Name,   Type, SubType, Offset,  Size,     Flags
+nvs,      data, nvs,     0x9000,  0x5000,
+otadata,  data, ota,     0xe000,  0x2000,
+app0,     app,  ota_0,   0x10000, 0x600000,
+spiffs,   data, spiffs,  0x610000,0x1E0000,
+coredump, data, coredump,0x7F0000,0x10000,

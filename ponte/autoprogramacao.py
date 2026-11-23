@@ -16,7 +16,23 @@ import json, os, shutil, subprocess, sys, threading, time
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CAM = os.path.join(RAIZ, "cam")
-FW_BUILD = os.path.join(CAM, ".pio", "build", "esp32s3cam", "firmware.bin")
+
+
+def _placa_env():
+    """Qual placa esta no robo: "esp32s3cam" (Freenove) ou "xiao" (XIAO Sense). Vem do PLACA_ENV do
+    ponte/maquina.json (local, fora do git); sem ele, a Freenove."""
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "maquina.json"), encoding="utf-8") as f:
+            v = str(json.load(f).get("PLACA_ENV", "")).strip()
+        if v in ("esp32s3cam", "xiao"):
+            return v
+    except (OSError, ValueError):
+        pass
+    return "esp32s3cam"
+
+
+PLACA_ENV = _placa_env()
+FW_BUILD = os.path.join(CAM, ".pio", "build", PLACA_ENV, "firmware.bin")
 BACKUP = os.path.join(RAIZ, "backup_placa")
 FW_BOM = os.path.join(BACKUP, "firmware_bom.bin")
 RESULTADO = os.path.join(BACKUP, "autoprogramacao_resultado.json")
@@ -182,7 +198,7 @@ class Programador:
         if any(m.startswith(p) for m in mudados for p in proibidos):
             return "mexi num arquivo proibido"
         if self.firmware_mudou:
-            r = subprocess.run(["pio", "run", "-d", CAM], capture_output=True, text=True, encoding="utf-8",
+            r = subprocess.run(["pio", "run", "-d", CAM, "-e", PLACA_ENV], capture_output=True, text=True, encoding="utf-8",
                                errors="replace", timeout=1200)
             if r.returncode != 0:
                 return "o firmware nao compilou"

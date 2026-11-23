@@ -17,7 +17,7 @@ import glob, json, os, re, shutil, socket, subprocess, sys, time
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, AQUI)
-from autoprogramacao import (CAM, FW_BOM, FW_BUILD, RESULTADO, EXIT_GRAVAR, EXIT_REINICIAR, _git)
+from autoprogramacao import (CAM, FW_BOM, FW_BUILD, PLACA_ENV, RESULTADO, EXIT_GRAVAR, EXIT_REINICIAR, _git)
 
 EXIT_DESPLUGOU = 3
 QUEDA_RAPIDA_S = 40      # robo.py que morre antes disso depois de uma mudanca: a mudanca quebrou
@@ -186,7 +186,7 @@ def grava(env):
         pass
     log("gravando o firmware novo")
     pio = shutil.which("pio", path=env.get("PATH")) or "pio"
-    if roda([pio, "run", "-t", "upload", "-d", CAM], env) == 0 and placa_respondeu():
+    if roda([pio, "run", "-t", "upload", "-d", CAM, "-e", PLACA_ENV], env) == 0 and placa_respondeu():
         log("placa voltou com o firmware novo")
         resultado(f"Pronto, me reprogramei! {resumo} Estou de volta.")
         return

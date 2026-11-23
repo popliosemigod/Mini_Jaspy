@@ -32,23 +32,7 @@ const char *NAME_UNKNOWN = "Creatura";
 // Semelhanca minima (de -1 a 1) para considerar que e o rapaz. Maior = mais rigoroso.
 const float MATCH_THRESHOLD = 0.55f;
 
-// Pinagem ESP32-S3-EYE / Freenove ESP32-S3 WROOM CAM
-#define PWDN_GPIO_NUM  -1
-#define RESET_GPIO_NUM -1
-#define XCLK_GPIO_NUM  15
-#define SIOD_GPIO_NUM  4
-#define SIOC_GPIO_NUM  5
-#define Y9_GPIO_NUM    16
-#define Y8_GPIO_NUM    17
-#define Y7_GPIO_NUM    18
-#define Y6_GPIO_NUM    12
-#define Y5_GPIO_NUM    10
-#define Y4_GPIO_NUM    8
-#define Y3_GPIO_NUM    9
-#define Y2_GPIO_NUM    11
-#define VSYNC_GPIO_NUM 6
-#define HREF_GPIO_NUM  7
-#define PCLK_GPIO_NUM  13
+// A pinagem da camera (e a de cada placa) esta em placa.h, incluida por robo.h
 
 #define IMG_W 320
 #define IMG_H 240
@@ -904,6 +888,7 @@ static void cmd_task(void *) {
 void setup() {
   link_begin();
   delay(200);
+  LOGF("Placa: %s | pescoco GPIO%d/%d", PLACA_NOME, SERVO_PAN_PIN, SERVO_TILT_PIN);
   LOGF("Iniciando camera com reconhecimento facial...");
   while (!init_camera()) delay(2000);
   camera_on = true;
