@@ -449,15 +449,17 @@ debate. Falas geradas antes (voz neural, 2 tentativas de 20 s por trecho; Maria 
 **Resultado:** seminário "Do Protótipo ao Chão de Fábrica" apresentado inteiro, 6 slides, 26 trechos,
 **5,8 min**, e o dono aprovou ("foi perfeito"). Volume no máximo (comando `volume 0-100` na placa).
 
-### 13.9 Troca da placa para a XIAO ESP32-S3 Sense (23/11/2026, 🟡 compila, NÃO testada)
+### 13.9 Troca da placa para a XIAO ESP32-S3 Sense (23/11/2026, 🟡 gravada e ensaiada; enlace com perda sob carga)
 Pedido do dono: trocar o microcontrolador pela XIAO Sense (câmera e microfone na placa), mantendo **dois
 servos** no pescoço. Segundo ambiente `xiao` em `cam/platformio.ini` (o `esp32s3cam` continua o padrão até
 a XIAO ser validada); pinos em `cam/src/placa.h`; ligação, diferenças e roteiro de ensaio em
 [`cam/PINAGEM_XIAO.md`](cam/PINAGEM_XIAO.md). Pontos que mudam: microfone **PDM** (GPIO41/42), USB **nativo**
 (`303A:1001`, o PC reconhece as duas), flash de 8 MB com tabela própria (a padrão não comporta os 4,4 MB),
 servos em **GPIO4/5** (38/39 são da câmera). A autoprogramação e o supervisor passam `-e` por
-`PLACA_ENV` (`ponte/maquina.json`). **Pendente na bancada:** gravar, medir o nível do microfone
-(`MIC_GANHO_PDM`), conferir o pescoço e que a placa não reinicia ao falar.
+`PLACA_ENV` (`ponte/maquina.json`). **Medido** (ensaio em [`cam/PINAGEM_XIAO.md`](cam/PINAGEM_XIAO.md)): câmera OV3660
+(acorda em 372 ms), microfone PDM e comandos ok; o USB-Serial-JTAG (HWCDC) perde bytes sob carga e o TinyUSB
+(`-e xiao_tusb`) não regrava sozinho. **Pendente na bancada:** alto-falante, servos, energia, ganho do microfone
+com voz, e escolher entre aceitar a perda, TinyUSB com BOOT apertado ou um adaptador USB-UART em D6/D7.
 
 ## 12. Cadastro facial com outras fotos
 
