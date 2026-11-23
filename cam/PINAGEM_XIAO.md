@@ -3,8 +3,28 @@
 Troca da Freenove ESP32-S3 CAM pela **Seeed XIAO ESP32-S3 Sense**. Os números abaixo são GPIO; entre
 parênteses, o nome impresso na placa. A fonte única dos pinos no código é [`src/placa.h`](src/placa.h).
 
-> **Estado (23/11/2026): compila e está dimensionado.** Os dois ambientes compilam (`xiao` 4,41 MB de
-> 6,29 MB; `esp32s3cam` como antes). **Nada foi gravado nem testado numa XIAO ainda.**
+> **Estado (23/11/2026): gravada e ensaiada pelo USB, com um limite conhecido no enlace** (ver "Ensaio
+> de 23/11"). Os três ambientes compilam (`xiao`, `xiao_tusb` e `esp32s3cam`, o de antes).
+
+## Ensaio de 23/11 (XIAO nova, MAC `94:A9:90:DF:61:58`, gravada pelo USB)
+
+| O que | Resultado medido |
+| --- | --- |
+| Boot, reconhecimento de rosto (autoteste) | ✅ 0,61 / 0,92 / 0,58, **idêntico à Freenove** |
+| Câmera | ✅ sensor **OV3660** (`0x3660`, não a OV2640), acorda em **372 ms** (Freenove: 745). Imagem muito esverdeada nos primeiros quadros: conferir o balanço de branco |
+| Microfone PDM | ✅ ~15,7 mil amostras/s; ruído médio **145** em silêncio (INMP441: 114). Ganho `MIC_GANHO_PDM=4` ainda **não calibrado com voz** |
+| Comandos PC → placa, servo | ✅ `servo 60 90` levou o `pan` a 60; o `servodiag` e os GPIO4/5 **não foram medidos** nesta placa |
+| Link, respostas curtas | ✅ 30 de 30 `stats` respondidos em < 0,1 s (a 5 comandos/s) **depois** de mandar cada quadro numa escrita só |
+| Link sob carga (microfone + fotos) | ⚠️ **2 de 8 fotos perdidas, 33 quadros corrompidos** no USB-Serial-JTAG (HWCDC) |
+| Alto-falante, servos movendo, energia | ⛔ não ensaiados (sem MAX98357A/servos ligados nesta placa) |
+
+**Por que o HWCDC perde bytes:** lendo `HWCDC.cpp`, a interrupção que esvazia o buffer escreve 64 bytes no FIFO
+do hardware sem conferir se cabe, enquanto cada `Serial.write` também mexe no FIFO; com o FIFO parcialmente
+cheio, o excesso some **no meio** do quadro. Mandar o quadro inteiro numa escrita (feito) reduziu muito, não
+zerou. **TinyUSB** (`pio run -e xiao_tusb`) não perde (0 erros em 57 s), **mas não regrava sozinho**: o reset por
+DTR/RTS e o toque de 1200 baud deixaram a placa parada, e só um replugue a recuperou. Como a autoprogramação
+precisa gravar sozinha, o padrão ficou o HWCDC. Saídas: aceitar a perda (o robô já tolera foto sem resposta),
+gravar o TinyUSB com BOOT apertado, ou ligar um **adaptador USB-UART** nos pinos D6/D7 (como a Freenove).
 
 ## O que já vem na placa (nada a ligar)
 

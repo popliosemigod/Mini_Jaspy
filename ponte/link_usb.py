@@ -12,16 +12,27 @@ import serial.tools.list_ports
 BAUD = 2000000  # no USB nativo da XIAO o baud nao importa
 CH343_VID = 0x1A86   # Freenove ESP32-S3 CAM (USB-serial CH343)
 ESPRESSIF_VID = 0x303A  # XIAO ESP32-S3 Sense (USB nativo da propria ESP32-S3)
+SEEED_VID = 0x2886      # a mesma, se o TinyUSB anunciar o VID da Seeed
+NATIVOS = (ESPRESSIF_VID, SEEED_VID)
 
 
 def find_port():
     """A placa do robo no USB. Com varias, prefere a CH343; senao a primeira ESP32-S3 de USB nativo.
     Com mais de uma ESP32-S3 plugada (ex.: a cabeca do Jaspy do laboratorio) use --porta."""
-    achadas = {CH343_VID: None, ESPRESSIF_VID: None}
+    achada_ch343 = achada_nativa = None
     for p in serial.tools.list_ports.comports():
-        if p.vid in achadas and achadas[p.vid] is None:
-            achadas[p.vid] = p.device
-    return achadas[CH343_VID] or achadas[ESPRESSIF_VID]
+        if p.vid == CH343_VID and achada_ch343 is None:
+            achada_ch343 = p.device
+        elif p.vid in NATIVOS and achada_nativa is None:
+            achada_nativa = p.device
+    return achada_ch343 or achada_nativa
+
+
+def _usb_nativo(porta):
+    for p in serial.tools.list_ports.comports():
+        if p.device == porta:
+            return p.vid in NATIVOS
+    return False
 
 
 class UsbRobot:
@@ -33,7 +44,10 @@ class UsbRobot:
             raise RuntimeError("placa nao encontrada em nenhuma porta USB (CH343 ou XIAO ESP32-S3)")
         s = serial.Serial()
         s.port, s.baudrate, s.timeout = self.port, BAUD, 0.1
-        s.dtr = False; s.rts = False  # nao reinicia a placa ao abrir
+        # CH343 (Freenove): DTR/RTS desligados, para nao reiniciar a placa nem entrar no modo de gravacao.
+        # USB nativo (XIAO, TinyUSB): o firmware so escreve com o DTR ligado ("conectado" = DTR); o RTS
+        # fica desligado (e o que faz parte da sequencia que reinicia para o bootloader).
+        s.dtr = _usb_nativo(self.port); s.rts = False
         s.open()
         self.ser = s
         self.tx_lock = threading.Lock()

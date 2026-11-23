@@ -5,12 +5,30 @@ static SemaphoreHandle_t tx_mutex;
 static void (*cmd_cb)(const char *) = NULL;
 static volatile uint32_t mic_req_until = 0;
 
+static size_t buf_rx_obtido = 0, buf_tx_obtido = 0;
+
 void link_begin() {
-  Serial.setRxBufferSize(32768);
-  Serial.setTxBufferSize(16384);
+  // NAO chamar Serial.end() na XIAO: no USB nativo (HWCDC) o end() derruba D+/D- e forca o PC a reenumerar a
+  // placa. setRx/TxBufferSize recriam os buffers a qualquer momento (lido em HWCDC.cpp, 23/11/2026).
+#if defined(ARDUINO_USB_MODE) && ARDUINO_USB_MODE == 0
+  // TinyUSB: a leitura nao perde bytes (o rx_task esvazia a fila a cada 1 ms), entao 8 KB bastam. 32 KB de RAM
+  // INTERNA a menos deixavam o maior bloco livre em 30,7 KB e a camera nao acordava (0xffffffff, 23/11/2026).
+  buf_rx_obtido = Serial.setRxBufferSize(8192);
+  buf_tx_obtido = 0;  // sem buffer de saida configuravel; a escrita bloqueia ate haver espaco
+#else
+  buf_rx_obtido = Serial.setRxBufferSize(32768);
+  buf_tx_obtido = Serial.setTxBufferSize(16384);
+#endif
   Serial.begin(LINK_BAUD);
   tx_mutex = xSemaphoreCreateMutex();
 }
+
+#if defined(PLACA_XIAO)
+// USB nativo: no HWCDC cada Serial.write mexe no FIFO de saida enquanto a interrupcao que o esvazia tambem
+// escreve nele; com o FIFO parcialmente cheio o excesso se perde NO MEIO do quadro (23/11/2026: respostas de
+// 344 bytes sumiam ou chegavam com um buraco). Por isso o quadro vai numa escrita so, nao em tres.
+static uint8_t *quadro_tx = NULL;
+#endif
 
 void link_send(char type, const void *data, size_t len) {
   if (len > 65535) len = 65535;
@@ -19,6 +37,17 @@ void link_send(char type, const void *data, size_t len) {
   const uint8_t *p = (const uint8_t *)data;
   for (size_t i = 0; i < len; i++) x ^= p[i];
   xSemaphoreTake(tx_mutex, portMAX_DELAY);
+#if defined(PLACA_XIAO)
+  if (quadro_tx == NULL) quadro_tx = (uint8_t *)ps_malloc(65535 + 6);
+  if (quadro_tx != NULL) {
+    memcpy(quadro_tx, h, 5);
+    if (len) memcpy(quadro_tx + 5, p, len);
+    quadro_tx[5 + len] = x;
+    Serial.write(quadro_tx, len + 6);
+    xSemaphoreGive(tx_mutex);
+    return;
+  }
+#endif
   Serial.write(h, 5);
   if (len) Serial.write(p, len);
   Serial.write(&x, 1);
@@ -53,14 +82,30 @@ static void handle(char type, uint8_t *d, size_t len) {
   }
 }
 
+// Contadores do que a placa RECEBE do PC (diagnostico do USB nativo da XIAO, 23/11/2026): bytes, quadros
+// com checksum certo e errado. Aparecem no log a cada 3 s enquanto o PC estiver mandando alguma coisa.
+static volatile uint32_t rx_bytes = 0, rx_ok = 0, rx_ruim = 0;
+
 static void rx_task(void *) {
   static uint8_t buf[4096 + 8];
   int st = 0; uint8_t type = 0; size_t len = 0, got = 0; uint8_t x = 0;
   static uint8_t tmp[512];
+  uint32_t ultimo_log = 0, bytes_no_log = 0;
+  link_log("[link] buffers do USB: entrada %u bytes, saida %u bytes (pedido: 32768 e 16384)",
+           (unsigned)buf_rx_obtido, (unsigned)buf_tx_obtido);
   while (true) {
     int a = Serial.available();
-    if (a <= 0) { delay(1); continue; }
+    if (a <= 0) {
+      // so avisa quando aparece quadro com checksum errado (no maximo a cada 3 s): sem erro, silencio no log
+      if (rx_ruim != bytes_no_log && millis() - ultimo_log > 3000) {
+        ultimo_log = millis(); bytes_no_log = rx_ruim;
+        link_log("[link] recebido do PC: %u bytes, %u quadros ok, %u com checksum errado | buffers USB rx %u tx %u",
+                 rx_bytes, rx_ok, rx_ruim, (unsigned)buf_rx_obtido, (unsigned)buf_tx_obtido);
+      }
+      delay(1); continue;
+    }
     int n = Serial.read(tmp, min(a, (int)sizeof(tmp)));
+    if (n > 0) rx_bytes += n;
     for (int k = 0; k < n; k++) {
     uint8_t c = tmp[k];
     switch (st) {
@@ -77,7 +122,7 @@ static void rx_task(void *) {
         if (got == len) st = 6;
         break;
       case 6:
-        if ((uint8_t)c == x) handle(type, buf, len);
+        if ((uint8_t)c == x) { rx_ok++; handle(type, buf, len); } else rx_ruim++;
         st = 0;
         break;
     }
