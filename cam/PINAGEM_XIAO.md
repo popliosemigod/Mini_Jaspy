@@ -26,6 +26,18 @@ DTR/RTS e o toque de 1200 baud deixaram a placa parada, e só um replugue a recu
 precisa gravar sozinha, o padrão ficou o HWCDC. Saídas: aceitar a perda (o robô já tolera foto sem resposta),
 gravar o TinyUSB com BOOT apertado, ou ligar um **adaptador USB-UART** nos pinos D6/D7 (como a Freenove).
 
+## Revisão: a XIAO fica plugada no PC o tempo todo (23/11/2026)
+
+O robô só funciona com o PC (Whisper, Claude e voz rodam lá), então a placa é um **periférico do cabo USB**:
+
+- **Energia e dados pelo mesmo cabo.** Use uma porta direto do PC (sem hub). O alto-falante e os servos ficam
+  em 5 V próprio, com GND em comum.
+- **Wi-Fi nasce desligado** na XIAO (`wifi_enabled = false` em `main.cpp`): menos corrente no 5 V do USB e
+  mais RAM interna para a câmera. `wifi 1` liga se algum dia for preciso.
+- **Foto com nova tentativa** (`link_usb.capture`): o HWCDC perde alguns quadros sob carga; o PC pede de novo
+  uma vez antes de desistir.
+- **Sem PC não há robô.** Desplugou, o supervisor espera e religa quando a placa volta.
+
 ## O que já vem na placa (nada a ligar)
 
 | Função | Pinos | Observação |

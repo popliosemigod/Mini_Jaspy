@@ -151,11 +151,14 @@ class UsbRobot:
         return self._stats if self._stats_ev.wait(timeout) else None
 
     def capture(self, timeout=7):
+        # O USB nativo da XIAO (HWCDC) perde alguns quadros sob carga (23/11/2026: 2 de 8 fotos): tenta de novo
+        # uma vez, com metade do prazo, antes de desistir da foto.
         with self._cap_lock:
-            self._jpeg_ev.clear(); self.cmd("capture")
-            if not self._jpeg_ev.wait(timeout):
-                return None
-            return self._jpeg or None
+            for prazo in (timeout, max(3, timeout // 2)):
+                self._jpeg_ev.clear(); self.cmd("capture")
+                if self._jpeg_ev.wait(prazo) and self._jpeg:
+                    return self._jpeg
+            return None
 
     def wake(self, ms=20000):
         self.cmd(f"wake {int(ms)}")

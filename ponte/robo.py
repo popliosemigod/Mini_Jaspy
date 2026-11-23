@@ -20,6 +20,8 @@ import subprocess, sys, tempfile, threading, time, urllib.request, wave
 
 import numpy as np
 
+import repertorio  # respostas prontas: atalho para frases simples e reserva quando o Claude cai
+
 RATE = 16000
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -91,6 +93,8 @@ HALLUCINATIONS = ["amara.org", "legendas pela comunidade", "obrigado por assisti
 # ---- nome: o Whisper escreve "Jaspy" de varios jeitos (Jasp, Jaspi, Jasper, Jaspe, Djaspy...)
 NOME_RE = re.compile(r"\b(?:d?j|y)[aáeé]s[pb](?:er|[eiy])?\b[\s,.:;!?-]*", re.I)
 NOME_ESPERA = 12  # s: depois de "Jaspy" sozinho, a proxima frase e a ordem
+TEMPO_CLAUDE = 45   # s: sem resposta do Claude nesse prazo, o robo usa o repertorio local
+ESPERA_CLAUDE = 60  # s: depois de uma falha, o robo nao tenta o Claude de novo por esse tempo
 
 
 def achar_nome(texto):
@@ -491,9 +495,31 @@ class Brain:
                "--tools", "", "--no-session-persistence", "--model", self.model, "--system-prompt", SYSTEM_PROMPT]
         self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                      text=True, encoding="utf-8", cwd=HERE)
+        # leitor em thread: a leitura direta do stdout travava a conversa para sempre se o Claude nao respondia
+        self.linhas = queue.Queue()
+        threading.Thread(target=self._le, args=(self.proc, self.linhas), daemon=True).start()
         log(f"[cerebro] Claude ({self.model}) iniciado")
 
+    @staticmethod
+    def _le(proc, q):
+        try:
+            for line in proc.stdout:
+                q.put(line)
+        except Exception:
+            pass
+        q.put(None)  # fim do fluxo (o processo morreu)
+
+    def _falha(self, heard, faces, motivo):
+        """Claude fora do ar: responde com o repertorio local e nao insiste por um tempo."""
+        self.indisponivel_ate = time.time() + ESPERA_CLAUDE
+        log(f"[cerebro] Claude indisponivel ({motivo}): repertorio local por {ESPERA_CLAUDE} s")
+        return repertorio.reserva(heard, faces)
+
+    indisponivel_ate = 0.0
+
     def ask(self, heard, jpeg, faces, extra=""):
+        if time.time() < self.indisponivel_ate:
+            return repertorio.reserva(heard, faces)
         if self.proc is None or self.proc.poll() is not None:
             self._start()
         if faces and faces.get("list"):
@@ -516,10 +542,19 @@ class Brain:
                                                         "data": base64.b64encode(jpeg).decode()}})
         content.append({"type": "text", "text": text})
         msg = {"type": "user", "message": {"role": "user", "content": content}}
+        fim = time.time() + TEMPO_CLAUDE
         try:
+            while not self.linhas.empty():  # sobra de uma resposta que chegou atrasada
+                self.linhas.get_nowait()
             self.proc.stdin.write(json.dumps(msg) + "\n")
             self.proc.stdin.flush()
-            for line in self.proc.stdout:
+            while True:
+                try:
+                    line = self.linhas.get(timeout=max(0.1, fim - time.time()))
+                except queue.Empty:
+                    raise TimeoutError(f"sem resposta em {TEMPO_CLAUDE} s")
+                if line is None:
+                    raise RuntimeError("o Claude encerrou")
                 try:
                     j = json.loads(line)
                 except ValueError:
@@ -527,17 +562,27 @@ class Brain:
                 if j.get("type") == "result":
                     res = j.get("result") or ""
                     # Limite de uso / erro do Claude: o robo leu em voz alta, em ingles,
-                    # "You've hit your session limit" (11/11/2026). Fala outra coisa.
+                    # "You've hit your session limit" (11/11/2026). Agora cai no repertorio local.
                     if j.get("is_error") or (not res.lstrip().startswith("{") and
                                              re.search(r"session limit|usage limit|rate limit|resets \d", res, re.I)):
                         log(f"[cerebro] erro do Claude: {res[:120]}")
-                        return {"fala": "Meu cerebro bateu no limite de uso por agora. Daqui a pouco eu volto a "
-                                        "conversar direitinho.", "gesto": "nenhum", "olhar": None}
+                        r = self._falha(heard, faces, "limite de uso ou erro")
+                        if r.get("generica"):
+                            r["fala"] = ("Meu cérebro bateu no limite de uso por agora. Daqui a pouco eu volto a "
+                                         "conversar direitinho. Enquanto isso, sei dizer as horas e contar piadas.")
+                        return r
                     return parse_reply(res)
         except Exception as e:
             log("[cerebro] erro:", e)
-        self.proc = None  # reinicia na proxima
-        return {"fala": "Desculpa, meu cerebro deu uma travada. Pode repetir?", "gesto": "nenhum", "olhar": None}
+            try:
+                if self.proc and self.proc.poll() is None:
+                    self.proc.kill()
+            except Exception:
+                pass
+            self.proc = None  # reinicia na proxima
+            return self._falha(heard, faces, str(e)[:60])
+        self.proc = None
+        return self._falha(heard, faces, "sem resultado")
 
 
 VISUAL_WORDS = ("ve", "vê", "ver", "vendo", "enxerg", "olha", "camera", "câmera", "quem", "rosto", "cara",
@@ -851,7 +896,11 @@ def main():
         ears.start()
 
     brain = Brain(args.modelo)
-    brain._start()
+    try:
+        brain._start()
+    except Exception as e:  # sem o Claude o robo sobe mesmo assim, so com o repertorio local
+        log(f"[cerebro] Claude nao iniciou ({e}): usando so o repertorio local")
+        brain.indisponivel_ate = time.time() + ESPERA_CLAUDE
     on_pc = args.falar_no_pc or robot is None
 
     import musica as musica_mod
@@ -1033,7 +1082,15 @@ def main():
             nota_musica += ("\nSuas musicas (" + str(len(nomes)) + "): " + "; ".join(nomes[:60])) if nomes else \
                 "\nVoce ainda nao tem nenhuma musica guardada (o dono precisa por os arquivos em ponte/musicas/)."
         extra = "\n".join(x for x in (prog.contexto(), comandos.contexto(), nota_nome, nota_musica.strip()) if x)
-        r = brain.ask(heard, seen.get("jpeg"), seen.get("faces"), extra)
+        # atalho local: frase curta e simples (oi, obrigado, que horas sao...) sem esperar o Claude; nao vale com
+        # uma programacao em andamento (a fala pode ser a confirmacao) nem com comando ensinado que combine
+        r = None
+        if not prog.contexto() and not any(c["quando"].lower() in heard.lower() for c in comandos.lista):
+            r = repertorio.procura(ordem if (chamou and ordem) else heard, seen.get("faces"))
+            if r:
+                log(f"[repertorio] resposta pronta (sem o Claude) para \"{heard}\"")
+        if r is None:
+            r = brain.ask(heard, seen.get("jpeg"), seen.get("faces"), extra)
         t_brain = time.time()
         log(f"[cerebro] ({t_brain - t_stt:.1f}s) {json.dumps(r, ensure_ascii=False)}")
         if robot:

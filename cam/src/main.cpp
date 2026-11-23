@@ -791,7 +791,13 @@ static void wifi_tune() {
 // ---------- comandos vindos do PC pelo USB (quadros 'C') ----------
 // Executados numa tarefa propria para nao travar a recepcao do audio do alto-falante.
 static QueueHandle_t cmd_queue;
+// XIAO: fica plugada no PC o tempo todo (USB = energia + dados), entao o radio nasce DESLIGADO: poupa corrente
+// do 5 V do USB e RAM interna da camera. O comando "wifi 1" liga. Freenove: como antes (ligado).
+#if defined(PLACA_XIAO)
+static volatile bool wifi_enabled = false;
+#else
 static volatile bool wifi_enabled = true;
+#endif
 
 // ---------- rede Wi-Fi propria da placa (modo reserva) ----------
 // Se a placa nao achar nenhuma rede conhecida (ex.: em outro lugar), ela cria a propria rede para a
@@ -908,7 +914,7 @@ void setup() {
 
   // Wi-Fi e opcional (pagina da camera / audio por UDP). O robo funciona pelo USB mesmo sem rede,
   // entao nada aqui espera a conexao: ela acontece em segundo plano no loop().
-  WiFi.mode(WIFI_STA);
+  WiFi.mode(wifi_enabled ? WIFI_STA : WIFI_OFF);
   WiFi.setSleep(false);
   WiFi.setHostname("esp32cam");
   for (auto &r : WIFI_REDES) wifi_multi.addAP(r.ssid, r.pass);
